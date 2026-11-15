@@ -82,6 +82,11 @@ if(MUNK2D_ENABLE_NEON_CONTACT_SOLVER)
   # AArch64 otherwise contracts the baseline contact expressions into FMA.
   # Keep the baseline contact oracle and packet arithmetic equally non-fused.
   set_source_files_properties(cpArbiter.c PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+  if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    # GCC's default fast contraction can fuse inlined baseline contact/joint
+    # expressions at the two stepping call sites during optimized/LTO builds.
+    set_source_files_properties(cpSpaceStep.c cpContactSolver.c PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+  endif()
 endif()
 message(STATUS "AArch64 packet NEON contact solver compiled: ${CP_NEON_CONTACT_SOLVER}")
 

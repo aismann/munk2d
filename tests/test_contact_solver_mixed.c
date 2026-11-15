@@ -164,6 +164,8 @@ static void compare(World *a, World *b)
   CHECK(!memcmp(&x->v, &y->v, sizeof(cpVect)));
   CHECK(!memcmp(&x->v_bias, &y->v_bias, sizeof(cpVect)));
   CHECK(!memcmp(&x->a, &y->a, sizeof(cpFloat)));
+  if(memcmp(&x->w, &y->w, sizeof(cpFloat)))
+   fprintf(stderr,"angular velocity mismatch: modes=%d/%d body=%d joints=%d values=%a/%a\n",a->mode,b->mode,i,a->jointCount,(double)x->w,(double)y->w);
   CHECK(!memcmp(&x->w, &y->w, sizeof(cpFloat)));
   CHECK(!memcmp(&x->w_bias, &y->w_bias, sizeof(cpFloat)));
  }

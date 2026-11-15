@@ -118,11 +118,13 @@ cpSpaceSetContactSolver(cpSpace *space, cpContactSolverType solver)
   return cpTrue;
  }
  if(cpContactSolverGet(space)) return cpTrue;
-#if (CP_AVX2_CONTACT_SOLVER || CP_WASM_SIMD_CONTACT_SOLVER) && CP_USE_DOUBLES
+#if (CP_AVX2_CONTACT_SOLVER || CP_WASM_SIMD_CONTACT_SOLVER || CP_NEON_CONTACT_SOLVER) && CP_USE_DOUBLES
  cpContactSolverContext *s = (cpContactSolverContext *)cpcalloc(1, sizeof(*s));
  if(!s) return cpFalse;
  s->type = solver;
-#if CP_WASM_SIMD_CONTACT_SOLVER
+#if CP_NEON_CONTACT_SOLVER
+ s->kernel = cpContactSolverKernelNeon;
+#elif CP_WASM_SIMD_CONTACT_SOLVER
  s->kernel = cpContactSolverKernelWasm;
 #else
  s->kernel = cpContactSolverKernelAvx2;

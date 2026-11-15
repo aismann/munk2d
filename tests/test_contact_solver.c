@@ -3,7 +3,9 @@
 #include <string.h>
 #include <fenv.h>
 #include "../src/cpContactSolver.h"
-#ifdef __EMSCRIPTEN__
+#if CP_NEON_CONTACT_SOLVER
+#define TEST_CONTACT_SOLVER CP_CONTACT_SOLVER_NEON
+#elif defined(__EMSCRIPTEN__)
 #define TEST_CONTACT_SOLVER CP_CONTACT_SOLVER_WASM_SIMD
 #else
 #define TEST_CONTACT_SOLVER CP_CONTACT_SOLVER_AVX2
@@ -219,7 +221,17 @@ static void poisonedPackets(void)
 
 int main(void)
 {
- features();CHECK(CP_CONTACT_SOLVER_BASELINE==0);CHECK(cpContactSolverIsAvailable(CP_CONTACT_SOLVER_BASELINE));CHECK(!cpContactSolverIsAvailable((cpContactSolverType)99));
+ features();CHECK(CP_CONTACT_SOLVER_BASELINE==0);CHECK(CP_CONTACT_SOLVER_NEON==3);
+ CHECK(cpContactSolverIsAvailable(CP_CONTACT_SOLVER_BASELINE));CHECK(!cpContactSolverIsAvailable((cpContactSolverType)99));
+#if CP_NEON_CONTACT_SOLVER && CP_USE_DOUBLES
+ CHECK(cpContactSolverIsAvailable(CP_CONTACT_SOLVER_NEON));
+#else
+ CHECK(!cpContactSolverIsAvailable(CP_CONTACT_SOLVER_NEON));
+ cpSpace *unavailable=cpSpaceNew();
+ CHECK(!cpSpaceSetContactSolver(unavailable,CP_CONTACT_SOLVER_NEON));
+ CHECK(cpSpaceGetContactSolver(unavailable)==CP_CONTACT_SOLVER_BASELINE);
+ cpSpaceFree(unavailable);
+#endif
 #ifdef __EMSCRIPTEN__
  CHECK(!cpContactSolverIsAvailable(CP_CONTACT_SOLVER_AVX2));
 #else

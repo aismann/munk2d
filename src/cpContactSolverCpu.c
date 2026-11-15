@@ -59,6 +59,10 @@ cpContactSolverIsAvailable(cpContactSolverType solver)
 {
  if(solver == CP_CONTACT_SOLVER_BASELINE) return cpTrue;
  if(solver == CP_CONTACT_SOLVER_AVX2) return cpContactSolverCpuSupported();
+#if CP_NEON_CONTACT_SOLVER && CP_USE_DOUBLES
+ /* AArch64 target probe verifies the mandatory double-precision ASIMD ISA. */
+ if(solver == CP_CONTACT_SOLVER_NEON) return cpTrue;
+#endif
 #if CP_WASM_SIMD_CONTACT_SOLVER && CP_USE_DOUBLES
  /* A SIMD-enabled Wasm module has already passed runtime validation at load. */
  if(solver == CP_CONTACT_SOLVER_WASM_SIMD) return cpTrue;

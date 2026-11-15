@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Opt-in double-precision AArch64 packet NEON contact solver, selected with
+  `CP_CONTACT_SOLVER_NEON` after building with
+  `MUNK2D_ENABLE_NEON_CONTACT_SOLVER=ON`. It reuses packet scheduling and mixed
+  joint synchronization without HastySpace threads. The option defaults OFF;
+  baseline remains the default solver. In enabled builds, baseline contact and
+  packet arithmetic disable FMA contraction for matching numerical policy.
+  See `docs/neon-contact-solver.md` for compatibility and device-specific results.
+
 ## 2.3.0 (released 2026-11-13)
 
 ### Fixed

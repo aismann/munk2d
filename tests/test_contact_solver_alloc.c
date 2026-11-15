@@ -3,7 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "../src/cpContactSolver.h"
-#ifdef __EMSCRIPTEN__
+#if CP_NEON_CONTACT_SOLVER
+#define TEST_CONTACT_SOLVER CP_CONTACT_SOLVER_NEON
+#elif defined(__EMSCRIPTEN__)
 #define TEST_CONTACT_SOLVER CP_CONTACT_SOLVER_WASM_SIMD
 #else
 #define TEST_CONTACT_SOLVER CP_CONTACT_SOLVER_AVX2

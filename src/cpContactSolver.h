@@ -8,6 +8,9 @@
 #ifndef CP_AVX2_CONTACT_SOLVER
 #define CP_AVX2_CONTACT_SOLVER 0
 #endif
+#ifndef CP_NEON_CONTACT_SOLVER
+#define CP_NEON_CONTACT_SOLVER 0
+#endif
 #ifndef CP_WASM_SIMD_CONTACT_SOLVER
 #define CP_WASM_SIMD_CONTACT_SOLVER 0
 #endif
@@ -92,6 +95,9 @@ CP_CONTACT_SOLVER_PRIVATE void cpContactSolverKernelAvx2(cpContactSolverContext 
 #endif
 #if CP_WASM_SIMD_CONTACT_SOLVER && CP_USE_DOUBLES
 CP_CONTACT_SOLVER_PRIVATE void cpContactSolverKernelWasm(cpContactSolverContext *context, int iterations);
+#endif
+#if CP_NEON_CONTACT_SOLVER && CP_USE_DOUBLES
+CP_CONTACT_SOLVER_PRIVATE void cpContactSolverKernelNeon(cpContactSolverContext *context, int iterations);
 #endif
 CP_CONTACT_SOLVER_PRIVATE cpBool cpContactSolverCpuSupported(void);
 /* Pure decision function also permits testing unavailable CPU/OS combinations. */

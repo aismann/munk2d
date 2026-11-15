@@ -59,6 +59,9 @@ licensed under the permissive MIT license. I hope you enjoy using Munk2D!
 - An [optional WebAssembly SIMD contact solver](docs/wasm-contact-solver.md)
   for explicit SIMD-enabled Emscripten builds, using two double lanes without
   browser threads. Scalar-compatible modules remain the default build.
+- An [optional AArch64 NEON packet contact solver](docs/neon-contact-solver.md)
+  for double-precision ARM64 builds, using two independent contacts per vector.
+  Build and per-space selection are opt-in; no HastySpace threads are used.
 - Support for collision event callbacks based on user definable object types.
 - Flexible collision filtering system with layers, exclusion groups and
   callbacks. \*\* Can be used to create all sorts of effects like one way

@@ -132,7 +132,7 @@ main(void)
 {
 	test_contact_terms();
 	const cpContactSolverType solvers[] = {
-		CP_CONTACT_SOLVER_BASELINE, CP_CONTACT_SOLVER_AVX2, CP_CONTACT_SOLVER_WASM_SIMD
+		CP_CONTACT_SOLVER_BASELINE, CP_CONTACT_SOLVER_AVX2, CP_CONTACT_SOLVER_WASM_SIMD, CP_CONTACT_SOLVER_NEON
 	};
 	for(unsigned int i = 0; i < sizeof(solvers)/sizeof(solvers[0]); i++){
 		if(!cpContactSolverIsAvailable(solvers[i])) continue;

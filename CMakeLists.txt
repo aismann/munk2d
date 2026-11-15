@@ -86,6 +86,7 @@ if(MUNK2D_ENABLE_LTO)
 endif()
 
 option(MUNK2D_ENABLE_AVX2_CONTACT_SOLVER "Build the optional runtime-guarded x86-64 AVX2 contact solver" ON)
+option(MUNK2D_ENABLE_NEON_CONTACT_SOLVER "Build the opt-in AArch64 double-precision packet NEON contact solver" OFF)
 # SIMD changes the Wasm module loading requirement, so it must be explicit.
 option(MUNK2D_ENABLE_WASM_SIMD_CONTACT_SOLVER "Build a SIMD-requiring Emscripten module with the optional contact solver" OFF)
 

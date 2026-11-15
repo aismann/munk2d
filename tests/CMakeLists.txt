@@ -18,7 +18,7 @@ set_tests_properties(chipmunk_contact_solver_quality_tests PROPERTIES TIMEOUT 30
 # compiles the scheduler. Keep their feature configuration equal to the library.
 get_target_property(_contact_solver_defs chipmunk_static COMPILE_DEFINITIONS)
 foreach(definition IN LISTS _contact_solver_defs)
-  if(definition MATCHES "^CP_(AVX2|WASM_SIMD)_CONTACT_SOLVER=")
+  if(definition MATCHES "^CP_(AVX2|WASM_SIMD|NEON)_CONTACT_SOLVER=")
     foreach(test_name contact_solver contact_solver_alloc contact_solver_quality contact_solver_mixed arbiter_total_ke)
       target_compile_definitions(chipmunk_${test_name}_tests PRIVATE "${definition}")
     endforeach()

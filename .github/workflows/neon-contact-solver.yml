@@ -1,0 +1,57 @@
+name: AArch64 packet NEON
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  native-arm64:
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [enabled, disabled, float, sanitizer]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        shell: bash
+        run: |
+          args=(-DCMAKE_BUILD_TYPE=Release -DBUILD_DEMOS=OFF -DBUILD_BENCHMARKS=ON -DBUILD_TESTING=ON)
+          case '${{ matrix.mode }}' in
+            enabled) args+=(-DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=ON);;
+            disabled) args+=(-DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=OFF);;
+            float) args+=(-DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=OFF -DCMAKE_C_FLAGS=-DCP_USE_DOUBLES=0);;
+            sanitizer) args+=(-DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=ON -DCMAKE_BUILD_TYPE=Debug -DMUNK2D_ENABLE_LTO=OFF '-DCMAKE_C_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer' '-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined' '-DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=address,undefined');;
+          esac
+          cmake -S . -B build "${args[@]}"
+          if [ '${{ matrix.mode }}' = float ]; then
+            if cmake -S . -B build-reject -DBUILD_DEMOS=OFF -DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=ON -DCMAKE_C_FLAGS=-DCP_USE_DOUBLES=0 > reject.log 2>&1; then
+              echo 'Float NEON configuration unexpectedly accepted'; exit 1
+            fi
+            grep -q 'NEON contact solver requires' reject.log
+          fi
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        shell: bash
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: halt_on_error=1
+        run: |
+          if [ '${{ matrix.mode }}' = float ]; then
+            # Existing full-float basic/energy tests have double-precision tolerances.
+            ctest --test-dir build --output-on-failure -R contact_solver
+          else
+            ctest --test-dir build --output-on-failure
+          fi
+      - name: Reject unavailable NEON CLI selection
+        if: matrix.mode == 'disabled' || matrix.mode == 'float'
+        shell: bash
+        run: |
+          set +e
+          ./build/benchmarks/munkbench --profile smoke --contact-solver neon > reject-cli.log 2>&1
+          code=$?
+          set -e
+          test "$code" = 2
+          grep -qi unavailable reject-cli.log

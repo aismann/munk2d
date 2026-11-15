@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Performance
+
+- Split the BB-tree cached-pair endpoint lists so cached collision processing
+  walks only callback-owned pairs. Pair records remain the same size; private
+  tree nodes gain one head pointer. Callback order, cached IDs, bounding-box
+  policy and collision tolerances are unchanged. See
+  `docs/bbtree-pair-lists.md` for validation, memory and workload-dependent results.
+
 ### Added
 
 - Opt-in double-precision AArch64 packet NEON contact solver, selected with

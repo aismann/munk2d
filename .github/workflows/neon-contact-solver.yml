@@ -43,7 +43,7 @@ jobs:
         run: |
           if [ '${{ matrix.mode }}' = float ]; then
             # Existing full-float basic/energy tests have double-precision tolerances.
-            ctest --test-dir build --output-on-failure -R contact_solver
+            ctest --test-dir build --output-on-failure -R 'contact_solver|bbtree_pair'
           else
             ctest --test-dir build --output-on-failure
           fi

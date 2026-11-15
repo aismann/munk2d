@@ -70,6 +70,7 @@ static inline cpSpatialIndexClass *Klass(void);
 	if(name != name##_local) cpfree(name); \
 } while(0)
 
+
 typedef struct Node Node;
 typedef struct Pair Pair;
 
@@ -104,6 +105,7 @@ struct Node {
 			int arrayIndex;
 #endif
 			Pair *pairs;
+			Pair *ownedPairs;
 		} leaf;
 	} node;
 };
@@ -113,6 +115,8 @@ struct Node {
 #define B node.children.b
 #define STAMP node.leaf.stamp
 #define PAIRS node.leaf.pairs
+#define OWNED_PAIRS node.leaf.ownedPairs
+#define LEAF_HAS_PAIRS(leaf) ((leaf)->PAIRS || (leaf)->OWNED_PAIRS)
 #ifdef CP_BBTREE_LEAF_INDEX
 #define ARRAY_INDEX node.leaf.arrayIndex
 #endif
@@ -220,63 +224,50 @@ PairFromPool(cpBBTree *tree)
 	}
 }
 
-static inline void
-ThreadUnlink(Thread thread)
+/* Separate endpoint-role lists reuse the existing pair threads. Insertion at
+ * each role's head preserves the old combined list's filtered callback order.
+ * Pair storage is unchanged; a leaf gains one additional private head pointer. */
+static inline void ThreadUnlinkA(Thread thread)
 {
-	Pair *next = thread.next;
-	Pair *prev = thread.prev;
-	
-	if(next){
-		if(next->a.leaf == thread.leaf) next->a.prev = prev; else next->b.prev = prev;
-	}
-	
-	if(prev){
-		if(prev->a.leaf == thread.leaf) prev->a.next = next; else prev->b.next = next;
-	} else {
-		thread.leaf->PAIRS = next;
-	}
+ if(thread.next) thread.next->a.prev=thread.prev;
+ if(thread.prev) thread.prev->a.next=thread.next;
+ else thread.leaf->PAIRS=thread.next;
 }
-
-static void
-PairsClear(Node *leaf, cpBBTree *tree)
+static inline void ThreadUnlinkB(Thread thread)
 {
-	Pair *pair = leaf->PAIRS;
-	leaf->PAIRS = NULL;
-	
-	while(pair){
-		if(pair->a.leaf == leaf){
-			Pair *next = pair->a.next;
-			ThreadUnlink(pair->b);
-			PairRecycle(tree, pair);
-			pair = next;
-		} else {
-			Pair *next = pair->b.next;
-			ThreadUnlink(pair->a);
-			PairRecycle(tree, pair);
-			pair = next;
-		}
-	}
+ if(thread.next) thread.next->b.prev=thread.prev;
+ if(thread.prev) thread.prev->b.next=thread.next;
+ else thread.leaf->OWNED_PAIRS=thread.next;
 }
-
-static void
-PairInsert(Node *a, Node *b, cpBBTree *tree)
+static void PairsClear(Node *leaf,cpBBTree *tree)
 {
-	Pair *nextA = a->PAIRS, *nextB = b->PAIRS;
-	Pair *pair = PairFromPool(tree);
-	Pair temp = {{NULL, a, nextA},{NULL, b, nextB}, 0};
-	
-	a->PAIRS = b->PAIRS = pair;
-	*pair = temp;
-	
-	if(nextA){
-		if(nextA->a.leaf == a) nextA->a.prev = pair; else nextA->b.prev = pair;
-	}
-	
-	if(nextB){
-		if(nextB->a.leaf == b) nextB->a.prev = pair; else nextB->b.prev = pair;
-	}
+ Pair *pair=leaf->PAIRS;
+ leaf->PAIRS=NULL;
+ while(pair){
+  Pair *next=pair->a.next;
+  ThreadUnlinkB(pair->b);
+  PairRecycle(tree,pair);
+  pair=next;
+ }
+ pair=leaf->OWNED_PAIRS;
+ leaf->OWNED_PAIRS=NULL;
+ while(pair){
+  Pair *next=pair->b.next;
+  ThreadUnlinkA(pair->a);
+  PairRecycle(tree,pair);
+  pair=next;
+ }
 }
-
+static void PairInsert(Node *a,Node *b,cpBBTree *tree)
+{
+ Pair *nextA=a->PAIRS,*nextB=b->OWNED_PAIRS;
+ Pair *pair=PairFromPool(tree);
+ Pair temp={{NULL,a,nextA},{NULL,b,nextB},0};
+ a->PAIRS=b->OWNED_PAIRS=pair;
+ *pair=temp;
+ if(nextA) nextA->a.prev=pair;
+ if(nextB) nextB->b.prev=pair;
+}
 
 //MARK: Node Functions
 
@@ -579,15 +570,8 @@ MarkLeaf(Node *leaf, MarkContext *context)
 			}
 		}
 	} else {
-		Pair *pair = leaf->PAIRS;
-		while(pair){
-			if(leaf == pair->b.leaf){
-				pair->id = context->func(pair->a.leaf->obj, leaf->obj, pair->id, context->data);
-				pair = pair->b.next;
-			} else {
-				pair = pair->a.next;
-			}
-		}
+  for(Pair *pair=leaf->OWNED_PAIRS;pair;pair=pair->b.next)
+   pair->id=context->func(pair->a.leaf->obj,leaf->obj,pair->id,context->data);
 	}
 }
 
@@ -623,6 +607,7 @@ LeafNew(cpBBTree *tree, void *obj, cpBB bb)
 	node->parent = NULL;
 	node->STAMP = 0;
 	node->PAIRS = NULL;
+	node->OWNED_PAIRS = NULL;
 	
 	return node;
 }
@@ -635,7 +620,7 @@ LeafUpdate(Node *leaf, cpBBTree *tree)
 	
 	if(!cpBBContainsBB(leaf->bb, bb)){
 		Node *staticRoot = GetRootIfTree(tree->spatialIndex.staticIndex);
-		if(leaf->PAIRS == NULL && tree->velocityFunc && staticRoot == NULL){
+		if(!LEAF_HAS_PAIRS(leaf) && tree->velocityFunc && staticRoot == NULL){
 			cpVect velocity = tree->velocityFunc(leaf->obj);
 			cpFloat width = bb.r - bb.l;
 			cpFloat height = bb.t - bb.b;

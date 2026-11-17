@@ -9,8 +9,9 @@ this file before repeating an experiment. Reducing solver iterations, collision
 accuracy, convergence, or numeric precision is not treated as an optimization; such
 quality/performance tradeoffs require explicit approval before implementation.
 
-Latest investigation: [polygon transform-coefficient load screen](#polygon-transform-coefficient-load-screen-2026-11-17)
-found no useful whole-step win. The [S22 campaign, November 2026](#s22-profiling-and-optimization-campaign-2026-11)
+Latest investigations: [deterministic batched collisions](#deterministic-batched-collision-screen-2026-11-17)
+and [polygon transform-coefficient loads](#polygon-transform-coefficient-load-screen-2026-11-17)
+found no general-purpose whole-step win. The [S22 campaign, November 2026](#s22-profiling-and-optimization-campaign-2026-11)
 records merged packet NEON/owned-pair traversal, rejected follow-ups and final
 hybrid performance/memory validation. Earlier profile notes are historical, not
 a current cross-platform bottleneck ranking.
@@ -777,3 +778,65 @@ phone CSV/state/telemetry data, timing-summary.json, screen-gate.json, and
 verification.json. Download archive: munk2d-shape-transform-loads-evidence.tar.gz.
 These artifact names describe the retained experiment; they are not paths
 shipped in this repository.
+
+## Deterministic batched collision screen (2026-11-17)
+
+**Decision: reject this first implementation as a general-purpose optimization.**
+User permits different trajectories but requires deterministic same-build/platform
+repeats and high-quality physics; PGO is excluded. Reference f6c2997, engine2006f7b.
+
+Private opt-in prototype: BBTree visitor queues at most 128 filter-surviving
+pairs, stable-partitions by six shape-pair kinds, dispatches geometry once per
+range, commits contacts in window/kind/arrival order, and writes back cached
+collision IDs through stable slots. No address-based sorting, threading, reduced
+precision/iterations/accuracy, public API/layout or default changes. Non-default
+begin/pre handlers and non-BBTree indexes use the immediate fallback. This
+callback limitation matters for Pymunk; no Python integration test was run.
+
+| Solver | Whole-step geometric | Summed scene time | Including setup/destruction | Same-reference A/A geometric |
+|---|---:|---:|---:|---:|
+| Normal baseline | 0.61% | 0.70% | 0.62% | -0.25% |
+| Packet NEON | 0.17% | -0.46% | 0.14% | 0.27% |
+
+Three alternating paired +three same-reference A/A rounds; all 26 reference
+scenes, CPU4, NDKr27dReleaseO3/LTO, identical monotonic harness,
+warmup/sample/batch1/1/1, 624 rows, all outliers retained. All 24 pre-run
+thermal checks status0, no root/clock changes; DVFS remains possible.
+Both solver configurations fail the advance-declared >=0.5% suite gain and
+no-consistent->3%-regression requirements. Individual target wins do not rescue
+the gate. No extension/tuning, independent confirmation or cross-platform
+performance/memory campaign. Near-flat means are not robust speedup evidence.
+
+Different trajectories occur in 44/104 scene/profile/solver combinations.
+Contact/energy/sleep differences are retained in changed-states.json; gains
+are not pure fixed-work collision-throughput measurements. AddPair is +8.87%
+baseline but -5.76% NEON; ConstraintMix final sleeping bodies 44->34 and42->37.
+No phase profile establishes an exact regression cause. This batches narrow
+phase, not the entire ~59%-of-step collision pipeline; existing broad-phase
+traversal remains and there is no SIMD narrow-phase kernel.
+
+Verification PASS: six complete24-test suites (fourAndroid, nativeRelease,
+nativeASan/UBSan), 42000 seeded exact narrow-phase oracle cases per run across
+six kinds, cached-ID-slot and4005-sensor-pair window stress, callback/index
+fallback tests. Six callback-free physical fixtures (8820steps/process) cover
+analytic restitution, stacks, friction cones, compound/jointed chain, segments,
+sensors and sleep/wake, with finite/energy/penetration/joint checks.
+Twenty-four fresh physical-fixture processes across eight configurations
+include actual packetNEON and nativeAVX2/ASanAVX2; repeated logs/digests match.
+All26smoke/reference benchmark replays produce2048 exact repeat checkpoint
+comparisons under allocator perturbation;3072records finite. Hashes include
+individual body and ordered active-contact numerical state, not pointers.
+These tests support same-build/platform repeatability for tested setups, not
+a cross-platform guarantee or exhaustive quality proof.
+
+No persistent fields/heap scratch added, but linkedAndroidNEON fixed stack
+frames total36960bytes (~36.1KiB), excluding deeper calls, versus176bytes for
+the reference cpSpaceStep. Existing contact/arbiter memory may change with
+trajectories; no allocation/RSS claim. The opt-in fallback also has a larger
+cpSpaceStep frame. Prototype retained privately; no engine PR.
+
+Workspace evidence: exports/munk2d-batched-collision/REPORT.md, PLAN.md,
+REPRODUCE.md, candidate.patch, harness.patch, test source, all rawphone
+CSV/state/telemetry and quality logs, binaries/hashes, stack prologues,
+timing-summary.json, screen-gate.json, verification.json. Download archive:
+munk2d-batched-collision-evidence.tar.gz (workspace artifacts, not repo paths).

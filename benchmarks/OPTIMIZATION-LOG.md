@@ -9,6 +9,11 @@ this file before repeating an experiment. Reducing solver iterations, collision
 accuracy, convergence, or numeric precision is not treated as an optimization; such
 quality/performance tradeoffs require explicit approval before implementation.
 
+Latest investigation: [S22 campaign, November 2026](#s22-profiling-and-optimization-campaign-2026-11)
+records merged packet NEON/owned-pair traversal, rejected follow-ups and final
+hybrid performance/memory validation. Earlier profile notes are historical, not
+a current cross-platform bottleneck ranking.
+
 ## Accepted
 
 | Area | Change | Result | PR |
@@ -27,6 +32,8 @@ quality/performance tradeoffs require explicit approval before implementation.
 | Solver | Skip zero-effect impulse writes to a static/kinematic collision body | Static-contact workloads -3% to -10%; dynamic-only controls neutral | [#40](https://github.com/vibloteket/munk2d/pull/40) |
 | Pivot Joint | Reuse local anchor offsets when applying the iteration impulse | PivotConstraints about -0.8%; ConstraintMix and integration controls neutral | [#44](https://github.com/vibloteket/munk2d/pull/44) |
 | Pivot/Groove Joint | Skip vector-length clamp when `maxForce` is infinite | Pivot -1.9% to -2.1%, Groove -5.0% to -6.8%; mixed/integration controls neutral | — |
+| Packet solver (AArch64, opt-in) | Independent-contact f64x2 NEON with shared packet infrastructure | S22 −2.86% smoke / −3.13% reference vs stock; −6.00% reference vs scalar packet control. Enabled-build non-fused arithmetic policy is a separate cost; see November campaign. | [#25](https://github.com/vibloteket/munk2d/pull/25) |
+| BBTree | Traverse only callback-owned cached pairs; role-specific unlink | S22 reference −3.20% baseline / −3.24% NEON geometric, about −7% summed; x86 also improves. Private Node 64→72 bytes, Pair unchanged; some scenes regress. | [#26](https://github.com/vibloteket/munk2d/pull/26) |
 
 ## Rejected: BBTree
 
@@ -252,7 +259,7 @@ quality/performance tradeoffs require explicit approval before implementation.
 - Ordinary MunkBench six paired rounds + A/A: initial Gear/DampedRotary smoke+2.86/+2.54 and Multifixture/SlowExplosion reference+1.53/+1.07 were not stable in a12-pair follow-up (respectively+0.35/+0.51/-0.11/~0%). Follow-up Gear reference+1.38% remains disclosed. No general stepping gain claimed.
 - Reproduce using `tools/segment-query.c`; optional `COUNT_QUERIES` validates candidate traces without timing instrumentation, and `MOVED_SNAPSHOT` prepares translated/reindexed snapshots. The versioned MunkBench protocol is unchanged.
 
-## Current profile notes
+## Earlier profile notes (before the S22 campaign)
 
 - `cpArbiterApplyImpulse` remains the largest contact-heavy hotspot (roughly 36–59% self time).
 - GJK/EPA calls are usually shallow; support-point work matters more than recursion depth. FrictionalPyramid EPA exits at iteration 1 about 99.5% of the time; FallingSquares exits at iteration 1–2 about 97% of the time; CollisionCallbacks commonly reaches iteration 2–3.
@@ -378,3 +385,353 @@ taskset -c 2 CAND/benchmarks/munkbench -b FallingCircles \
 CAND/benchmarks/munkbench --profile reference --contact-solver avx2 \
   --summary-json --checkpoints 0,1,10,100,final
 ```
+
+## S22 profiling and optimization campaign (2026-11)
+
+Measurements: 2026-11-15–16; consolidated 2026-11-17. This records both successful changes and rejected ideas;
+**the final hybrid is not a proposed production optimization**. Earlier research
+reports retain their original recommendations and pre-merge status. The outcomes
+below supersede those recommendations: PRs #25/#26 are merged; later prototypes
+are not. No physics-quality reductions, changed tolerances, lower precision or
+reordered collision callbacks were accepted to manufacture a speedup.
+
+### Controls, terminology and measurement scope
+
+- **Normal baseline** means the ordinary `cpSpaceStep` contact solver, not the
+  scalar packet control. **Scalar packet control** uses the packet preparation,
+  schedule and arithmetic without explicit SIMD. **Packet NEON** is the new
+  independent-contact backend, not HastySpace's legacy within-contact NEON.
+- Initial base: 2.3.0 commit `4a27330`. Packet NEON merged as `86e6851`; the
+  owner-only cached-pair change merged as `2006f7b`. All subsequent experiments
+  below compare against `2006f7b`, not against the original release.
+- Primary target: Galaxy S22 SM-S901B / Exynos 2200, Android ARM64 doubles,
+  NDK r27d/API 28, Release/O3 and project LTO. Early runs used affinity mask
+  `0x30` (A710 CPUs 4/5); cache profiling and later layouts used CPU4 (`0x10`).
+  No root, clock locking or governor/power changes. Sampled thermal status zero
+  and battery temperatures are not continuous CPU-temperature/frequency control.
+- Research timing uses `CLOCK_MONOTONIC`; profiling/counters are separate from
+  timing binaries. Unless explicitly stated otherwise, results are reference
+  profile, whole-step wall time over all 26 scenes. Setup/destruction are outside
+  that timer. The final hybrid validation additionally measures scene lifecycle.
+- Negative percentages mean less time. Suite geometric means equally weight
+  median paired ratios per scene; summed-time ratios weight long scenes more.
+  Alternating order, warmups, A/A controls and retained outliers limit—not
+  eliminate—noise. A/A is not a confidence interval or a correction to subtract.
+  Do not add improvements from different bases/campaigns or interpret replay,
+  profiler shares and lifecycle microbenchmarks as interchangeable frame times.
+
+### 1. Existing HastySpace/NEON: establish what actually runs
+
+On this Android compiler, stock `cpHastySpace.c` tests `__ARM_NEON__`, while the
+compiler defines `__ARM_NEON`. Its handwritten NEON therefore is not selected.
+A separately labelled diagnostic build enables the existing kernel without
+rewriting it. Six interleaved rounds, all 26 scenes in smoke/reference profiles,
+gave 1,560 timing samples:
+
+| Variant versus normal baseline | Smoke geometric | Reference geometric |
+|---|---:|---:|
+| Stock HastySpace, one thread | +0.21% | +0.16% |
+| Existing NEON, one thread | +2.24% | +0.51% |
+| Stock HastySpace, two threads | +39.80% | +20.61% |
+| Existing NEON, two threads | +44.14% | +22.56% |
+
+**Outcome:** no demonstrated whole-step benefit from the legacy NEON kernel;
+threading is worse on this setup. One-thread stock HastySpace matches baseline
+captured states exactly. Enabled legacy NEON changes trajectories; two-thread
+runs are nondeterministic. Finite captured states and 752,936 conditioned direct
+kernel comparisons at scaled tolerance `1e-10` are not a claim of byte-equivalence
+to the ordinary solver. Do not confuse these results with packet NEON below.
+
+### 2. Accepted implementations: packet NEON and owner-only cached pairs
+
+**Packet NEON — merged [#25](https://github.com/vibloteket/munk2d/pull/25),
+`86e6851`.** Two independent f64 contacts per vector, sharing packet scheduling,
+scalar fallback and mixed-joint infrastructure; opt-in, no HastySpace threads.
+Six rounds, 26 scenes and two profiles (1,248 measured scene samples):
+
+| Comparison | Smoke geometric | Reference geometric |
+|---|---:|---:|
+| Packet NEON / stock 2.3.0 | −2.86% | −3.13% |
+| Packet NEON / scalar packet control | −6.80% | −6.00% |
+| Enabled-build ordinary baseline / stock | +1.75% | +1.11% |
+
+The last row exposes a real cost: enabled builds align contact arithmetic with
+the non-fused packet oracle. Default option-OFF compilation is unchanged. Packet
+NEON and scalar packet checkpoint captures match exactly; this is **not** exact
+trajectory equivalence with differently compiled stock. Some scenes regress.
+All 22 phone CTests and 13 substantive CI checks passed, including native Linux
+ARM64 Clang ASan/UBSan. Android ASan did not work even for hello-world and is not
+claimed passing; the native ARM sanitizer run excludes the pre-existing
+function-type callback-cast category. No default or Pymunk policy change.
+
+**Owner-only cached-pair traversal — merged
+[#26](https://github.com/vibloteket/munk2d/pull/26), `2006f7b`.** Split private
+leaf pair lists by endpoint role and walk only callback-owned `b` pairs. Preserve
+filtered callback order, cached IDs and opposite-endpoint unlink behavior.
+Common 64-bit Node grows 64→72 bytes; Pair stays 56 bytes.
+
+Six-round S22 reference results: baseline **−3.20% geometric / −6.99% summed**;
+NEON **−3.24% / −7.10%**. AddPair improves roughly 30–31%, Multifixture 11%.
+Separate three-round x86 reference checks improve 2.97% baseline / 3.56% AVX2
+geometrically. Some joint scenes regress; the report retains confirmation
+outliers and A/A controls rather than selecting the most favorable capture.
+Phone 23/23, native sanitizers, custom-timestamp checks and all 13 substantive CI
+checks passed. All captured smoke/reference states match within each solver.
+The 20,000-operation pair model and 600-frame public trace cover order, IDs,
+removal/reuse, static/dynamic sharing and velocity bounds. Wasm CI passing is
+not a Wasm performance measurement.
+
+### 3. Profiles: why collision work, rather than another SIMD rewrite
+
+Before #26, summed NEON reference phase times were **62.14% collision pipeline,
+2.90% packet preparation and 8.74% packet kernel**. Preparation/kernel are nested
+within solving, not extra top-level categories. Forty hardware recordings
+(~71,000 exported samples), separate phase/count builds and 22 phone CTests
+supported targeting cached-pair traversal: **47% of cached visits merely followed
+a non-owner link**.
+
+After #26, 40 new recordings (~69,000 samples), phase controls and 23 phone CTests
+found **59.13% collision, 3.12% packet preparation and 9.46% packet kernel**.
+Cached visits dropped from 66,014,990 to 34,972,521; all 31,042,469 non-owner-only
+visits disappeared, while callback/rejection/geometry counters matched. These
+cross-campaign phase shares are not a new paired speedup estimate.
+
+The remaining candidates differ by workload: AddPair rejects about 98.4% of
+candidates on exact AABB overlap; Multifixture has much more same-body rejection.
+Tumbler/FallingSquares have substantial narrow geometry. FrictionalPyramid still
+has a large packet-kernel share; collision is a suite priority, not a universal
+claim that SIMD work cannot help.
+
+### 4. Rejected small traversal and geometry changes
+
+Independent candidates; never silently combined. Three-round full-suite screens
+use matched baseline/NEON builds and fresh references. Positive means slower.
+
+| Idea | Baseline / NEON geometric result | Decision and qualification |
+|---|---:|---|
+| Prefetch next owned pair and endpoint | +0.37% / +0.32% | Reject this one-step schedule. AddPair +3.00% / +3.54%; no suite win. Not proof that every prefetch strategy fails. |
+| Same-body rejection before exact AABB | +0.47% / +0.38% | Multifixture −3.55% / −2.52%, but AddPair +6.05% / +5.72%; reject. |
+| Bounded index wrapping instead of modulo | +0.41% / +0.15% | Removes AArch64 `sdiv` from EPA but effectively flat whole-step results; reject. |
+| Four-vertex polygon-support specialization | +0.41% / +0.16% | Effectively flat; reject despite the common four-vertex workload. |
+| Iterative GJK, preserving every decision | +0.09% / +0.41% | Recursion disappears, but combined GJK frame remains 656 bytes and neither replay nor target whole steps improve usefully; reject. |
+
+Prefetch/body-first: 624 candidate/reference plus 312 A/A timing samples; six
+23-test phone suites and exact captures for both profiles. No new sanitizer or
+cross-platform performance campaign was claimed for these rejected screens.
+
+Wrapping/support-4: another 936 timings, six 23-test phone suites, exact scene
+captures, **144,000 differential collision calls per candidate** against unchanged
+collision code, and ~8.48 million integer wrapping cases per oracle run. Separate
+workload counters found **96.53% four-vertex support scans** and **1.49 EPA rounds
+per call**, with shallow hulls. That does not authorize lowering iteration caps,
+changing tolerances or assuming every application has boxes.
+
+Iterative GJK: 624 whole-step samples including A/A, 144 replay samples, two
+23-test candidate phone suites, 144,000 differential calls per solver build,
+exact full-scene captures and exact replay. Small/flat screens were not promoted
+to expensive cross-platform campaigns.
+
+### 5. Collision replay and support-data experiments
+
+A reusable research harness captures actual FallingSquares/Tumbler collisions:
+**8,192 records per scene**, including transformed geometry, radii, segment data,
+shape hashes, cached IDs and expected ordered results. Deterministic recapture
+hashes and bit-exact finite replay validate the harness. Eight cycle recordings
+(15,525 samples) attribute about 42–44% of **replay-loop**, not whole-step, cycles
+to GJK/EPA recursion.
+
+Reusing all records in 64-record blocks makes replay substantially faster, but
+changes reuse distance and branch behavior. The 2,800-byte copied pair records do
+not model the application's shared-shape layout faithfully; this is a locality
+hypothesis, not an achievable 20–30% application gain. `hot64` also changes case
+mix and is an even less controlled cache comparison.
+
+Two further independent ideas:
+
+- **Interleave equal-count polygon support searches:** preserves each polygon's
+  order and strict tie decisions; unequal counts keep the original path. Replay
+  improves 0.85% FallingSquares / 0.21% Tumbler, but six-round targeted whole-step
+  results are −0.29% / −0.49% with baseline and **+0.21% / −0.06% with NEON**.
+  Reject as a general improvement; the support function grows 252→484 bytes.
+- **Cache polygon counts/plane pointers in collision-local SupportContext:**
+  context grows 32→56 bytes; replay changes +0.08% / +1.07%. Reject at replay
+  screening; **no whole-step timing campaign for this candidate**.
+
+Combined evidence: 432 replay samples including A/A, 144 targeted application
+samples for interleaving, four 23-test phone suites, four 144,000-case collision
+oracles, exact captures for all 26 scenes/both profiles, and exact corpora. The
+whole-step performance follow-up covers only two scenes; all-scene correctness
+must not be described as all-scene performance validation.
+
+### 6. Cache/stall attribution and the failed dense mirror
+
+On unchanged `2006f7b`, CPU4 user-only PMU events work without root. Twenty
+recordings (83,422 exported samples) and 60 simultaneous counter groups distinguish
+cycles, L1D refills, memory-backend stalls and last-level read misses. In NEON
+AddPair/Multifixture, collision accounts for **80.5% / 82.9% of sampled step
+memory-backend-stall events**, with weight around owned-pair traversal and
+rejection. Shape updates are a separate secondary locality target.
+
+Event shares are not recoverable wall time. `STALL_BACKEND_MEM` is nested within
+backend stalls, L1 refills are not lost cycles, and sampled PCs can skid past the
+causal instruction. Count groups had about 99% coverage, not perfect coverage.
+Five-scene diagnostics are not a new all-suite timing aggregate.
+
+**Dense per-owner view/mirror:** keep intrusive membership authoritative; lazily
+rebuild a contiguous array of other-object/pair/ID entries after mutation, with
+allocation-failure fallback. Reject: AddPair **+16.66% / +18.43%**, Multifixture
+**+2.56% / +3.39%** (baseline/NEON). Only a two-scene timing screen, 72 samples;
+planned full-suite/A/A runs were not completed and must not be counted.
+
+Freshly built views serve ~72% of AddPair and ~48% of Multifixture dense-path
+callbacks. Rebuild traverses/copies the old chain and ID writeback still touches
+scattered pairs; Node grows 72→88 bytes plus auxiliary entries. Reuse of empty
+view walks is not evidence of useful per-callback amortization. Both phone
+23-test suites, native ASan/UBSan 23/23, allocation-failure/custom-timestamp
+checks and 512 exact checkpoint comparisons pass. Correctness does not redeem
+the performance cost; do not reintroduce this mirror without a new hypothesis.
+
+### 7. Authoritative four-slot storage and differential profiling
+
+Replace—not mirror—pair storage with pooled owner-local four-entry blocks and
+stable 32-bit removal handles, retaining callback order and IDs. Node shrinks
+72→64 bytes, entry is 32 bytes, block 160 bytes; these sizes alone do not prove
+lower total memory. Lifecycle/shadow models compare four/eight slots and update
+costs; they are diagnostics, not measured speedups.
+
+| Variant | Rounds | Baseline / NEON geometric change |
+|---|---:|---:|
+| Original authoritative four-slot blocks | 6 | +0.90% / +0.79% |
+| Traverse only occupied bits | 3 | +0.67% / +1.06% |
+| Physically compact entries, stable logical handles | 3 | +1.22% / +1.88% |
+
+Original blocks improve AddPair/Multifixture about 7%, but regress smaller scenes.
+Neither bounded refinement fixes the suite trade-off. **Reject all three as
+general optimizations.** Retain 1,776 timings including controls/outliers and
+1,536 exact checkpoint comparisons. Original blocks pass six full 23-test suites
+(phone ×2, native sanitizers, AVX2, Wasm scalar/SIMD); refinements have narrower
+model/sanitizer/phone/state coverage and must not inherit those full-suite claims.
+Allocation/capacity death tests are hard-fail checks, not recoverable OOM fallback.
+No x86/Wasm performance campaign was run for these block variants.
+
+A separate comparison of **original blocks only** against reference explains
+part of the difference: NEON AddPair/Multifixture retire **12.79% / 8.89% more
+instructions**, but memory-backend-stall events fall **39.63% / 32.08%**. Smaller
+scenes get fewer stall savings. These counter totals include setup/destruction;
+sampled instruction attribution is step-scoped. Insertion/removal is **not the sole overhead**;
+traversal, fresh tree queries and bookkeeping also add instructions. Median owner
+degree alone is misleading: callback-weighted large-owner work matters more.
+
+Evidence: 56 recordings (including extra instruction sampling), 120 counter
+groups, 281,005 exported samples and 100 exact fresh checkpoints. One vDSO
+last-level-miss sample is absent from simpleperf's text export and explicitly
+accounted for, not silently classified as a step sample. No new CTest run was
+claimed for these unchanged, previously tested binaries. This motivated the
+small-owner hybrid below; it did not establish that the hybrid would succeed.
+
+### 8. Hybrid: promising screen, then reject as a general optimization
+
+Keep ordinary pooled pairs for degree ≤7; on the eighth insertion move seven
+pairs into an owner-local eight-entry slab. Preserve pointer-thread traversal,
+order, IDs and both-endpoint links; stay slab-backed until the owner empties.
+No mirror or per-frame copy. Slot tags recover the slab address, including late
+association of a populated static tree with a dynamic master. Head-slab hole
+reuse does not search all older slabs.
+
+The initial pointer-local design replaces an un-timed indexed pilot. Do not
+attribute the final performance results to that pilot. The three-round screen
+was extended, on the frozen candidate, to six: baseline **−1.11% geometric /
+−2.89% summed**, NEON **−0.79% / −2.85%**. AddPair improves 15–16%, Multifixture
+9–10%, but some scenes regress up to 1.85%. A/A is +0.39% / +0.31%; the later
+three rounds show a weaker NEON gain. This is **screen-driven extension, not an
+independent six-round replication**. Initial verification: 936 timings, 512 exact
+ordinary plus 25 diagnostic checkpoints, six full 23-test suites, migration,
+late-association, sanitizer and hard-failure checks.
+
+**Fresh validation after cleanup:** remove diagnostic-only code without changing
+the policy; integrate migration/late-association tests; measure setup, step,
+destruction and complete scene lifecycle identically on both sides. Predeclare
+six paired plus three A/A rounds for all 26 reference scenes per configuration.
+Do not pool this campaign with the earlier screen:
+
+| Configuration | Step geometric | Lifecycle geometric | Step A/A geometric |
+|---|---:|---:|---:|
+| S22 baseline | −0.74% | −0.80% | +0.05% |
+| S22 packet NEON | −1.11% | −1.12% | −0.05% |
+| x86 baseline | −0.28% | −0.27% | −0.14% |
+| x86 AVX2 | −0.72% | −0.71% | +0.34% |
+| Wasm baseline | −0.08% | −0.05% | +0.53% |
+| Wasm SIMD | +1.36% | +1.32% | −1.24% |
+
+The phone benefit survives setup/destruction. Wasm SIMD is slower in all six
+paired round aggregates, but its sizable A/A drift makes the exact regression
+magnitude uncertain. Host: shared i5-12400T, GCC 15.2, CPU10 affinity, two-CPU
+cgroup quota; Wasm uses Emscripten 5.0.3 / Node 20.19.4, **not a browser**.
+Our compilation/sanitizer work finishes before host timings. No Windows/macOS
+or browser campaign is implied.
+
+**Measured memory cost changes the recommendation.** Separately wrapped allocator
+runs show AddPair peak requested live bytes increasing **25.6–33.9%**, up to
+about **1.44 MiB**; S22 Multifixture increases ~19–20%. Common 64-bit Node/Pair
+remain 72/56 bytes, but slab headers, unused slots, pool retention and tree
+metadata still cost memory. Wasm32 Pair grows **28→32 bytes**. Requested bytes
+exclude instrumentation headers, allocator overhead and libc-internal allocation;
+they are not RSS. Logical realloc accounting excludes temporary copy overlap.
+All 312 instrumented scene runs return to their starting tracked-live byte count.
+
+Final verification: **2,808 timing rows** (1,872 paired +936 A/A), **1,536 exact
+ordinary checkpoint comparisons +1,536 instrumented-to-ordinary comparisons**,
+plus unchanged prior-prototype phone captures. **Eleven full 23-test suites**
+pass (both sides' Android ×2, native, Wasm ×2, and candidate native ASan/UBSan),
+as do eight expected allocation-death tests. Twenty-eight binary-file hashes,
+frozen source and extracted-archive offline verification pass. Main pair trace
+`a31a51db85441653` and late-association trace `f78ae303e12f3f6e` match. Custom
+64-bit timestamp coverage here is private model/allocation testing, not a full
+rebuilt library suite; allocation-tracking-array failure is not covered.
+
+**Final decision: no general-purpose optimization PR.** Keep the isolated
+prototype as evidence, leave production unchanged and stop tuning it against
+these observations. A dense 64-bit application might consciously accept the
+throughput/memory trade-off; that does not justify changing everyone's default.
+A future memory-efficient owner representation remains an unproven new idea.
+
+### 9. Carry-forward conclusions and evidence index
+
+- Profile the actual remaining workload before another SIMD or data-layout
+  rewrite. Shape-update locality is an untested secondary target from this
+  campaign, not an approved or demonstrated optimization.
+- Lower cache-stall counts and denser-looking loops are not sufficient: include
+  instruction/update cost, setup/destruction, migration, total requested memory,
+  all-scene regressions and 32-bit layouts in the decision.
+- Preserve the rejected variants and their limits; do not repeat them under a
+  new name, claim narrow checks as full-suite testing, or silently discard
+  negative controls. Revisit only with a materially different hypothesis and
+  fresh paired measurements.
+
+Detailed reports and raw evidence were delivered separately and retained under
+workspace `exports/`; they are **not committed repository files or public URLs**.
+The following report basenames identify the supporting records, including exact
+commands, toolchain/binary hashes, scripts, CSVs, profiler data and qualifications:
+
+| Record | Report basename |
+|---|---|
+| Legacy HastySpace/NEON | `munk2d-s22-existing-neon-report.md` |
+| Accepted packet NEON | `munk2d-packet-neon-report.md` |
+| First whole-step profile | `munk2d-s22-profile-report.md` |
+| Accepted owned-pair traversal | `munk2d-bbtree-cached-pairs-report.md` |
+| Post-merge profile | `munk2d-s22-profile-round2-report.md` |
+| Prefetch / rejection order | `munk2d-bbtree-locality-rejection-report.md` |
+| Wrapping / support-4 | `munk2d-gjk-epa-s22-report.md` |
+| Collision replay / iterative GJK | `munk2d-gjk-iterative-report.md` |
+| Interleaving / cached support metadata | `munk2d-support-data-report.md` |
+| Cache and memory-stall attribution | `munk2d-cache-profile-report.md` |
+| Rebuilt owner-pair mirror | `munk2d-owner-pair-view-report.md` |
+| Authoritative blocks and refinements | `munk2d-authoritative-pair-layout-report.md` |
+| Winning/losing layout differential profile | `munk2d-layout-differential-report.md` |
+| Initial hybrid screen and confirmation | `munk2d-hybrid-pairs-report.md` |
+| Independent hybrid performance/memory validation | `munk2d-hybrid-validation-report.md` |
+
+Use the recorded base and separate reference/candidate build directories. Runners
+that skip existing files are resumable, not independent repeats: preserve old
+outputs and use a fresh output directory for a new campaign. Never run concurrent
+phone campaigns. The version string alone does not identify the measured source.

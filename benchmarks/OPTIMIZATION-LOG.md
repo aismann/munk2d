@@ -9,7 +9,8 @@ this file before repeating an experiment. Reducing solver iterations, collision
 accuracy, convergence, or numeric precision is not treated as an optimization; such
 quality/performance tradeoffs require explicit approval before implementation.
 
-Latest investigation: [S22 campaign, November 2026](#s22-profiling-and-optimization-campaign-2026-11)
+Latest investigation: [polygon transform-coefficient load screen](#polygon-transform-coefficient-load-screen-2026-11-17)
+found no useful whole-step win. The [S22 campaign, November 2026](#s22-profiling-and-optimization-campaign-2026-11)
 records merged packet NEON/owned-pair traversal, rejected follow-ups and final
 hybrid performance/memory validation. Earlier profile notes are historical, not
 a current cross-platform bottleneck ranking.
@@ -735,3 +736,44 @@ Use the recorded base and separate reference/candidate build directories. Runner
 that skip existing files are resumable, not independent repeats: preserve old
 outputs and use a fresh output directory for a new campaign. Never run concurrent
 phone campaigns. The version string alone does not identify the measured source.
+
+## Polygon transform-coefficient load screen (2026-11-17)
+
+**Decision: rejected as a general-purpose optimization; no engine change.**
+Reference f6c2997 (engine identical to 2006f7b). A private candidate snapshots the
+six by-value transform coefficients in cpPolyShapeCacheData, keeping arithmetic
+grouping and vertex/BB order unchanged. Linked NDK r27d ARM64 assembly confirms
+three coefficient-pair loads move outside the vertex loop, without new fields or
+allocations. This assembly improvement did not produce a useful whole-step win.
+
+| Solver | Whole-step geometric | Summed scene time | Including setup/destruction | Same-binary A/A geometric |
+|---|---:|---:|---:|---:|
+| Normal baseline | -0.19% | -0.17% | -0.26% | 0.13% |
+| Packet NEON | -0.04% | -0.12% | -0.08% | 0.06% |
+
+Lower is faster. Three alternating paired rounds, all 26 reference scenes,
+CPU 4, identical monotonic wall-time harness, warmup/sample/batch 1/1/1;
+three same-reference-binary A/A rounds. All outliers retained. No root/clock changes;
+all 24 pre-run thermal checks were status 0 (not a fixed-clock guarantee).
+Neither solver passed the prospective <=-0.5% full-suite geometric threshold,
+nor the >=1% improvement requirement for at least one FallingSquares,
+Multifixture, or Tumbler target. No scene regressed >2% in all three rounds.
+The gate failed: no extension to six rounds, no independent/cross-platform
+performance validation, no rescue variant, and no optimization PR.
+
+Verification: 624 timing rows (312 paired +312 A/A), 512 exact scene checkpoint
+comparisons with zero reported invalid values, five complete 23-test suites
+(four Android and one native ASan/UBSan), and 1,000,000 bitwise direct polygon
+cache comparisons (200,000 per build). The direct oracle covers counts 0..32,
+finite/raw IEEE transforms and planes, identity/zero controls, destination
+planes and BBs, and source preservation; degenerate counts are internal stress
+cases rather than claims about public polygon validity. Native sanitizer results
+do not stand in for Android ASan. No allocation/RSS campaign was run: the source
+change adds no storage or allocations.
+
+Workspace evidence: exports/munk2d-shape-update-investigation/REPORT.md,
+plan.md, candidate.patch, harness.patch, linked disassembly, oracle/build scripts,
+phone CSV/state/telemetry data, timing-summary.json, screen-gate.json, and
+verification.json. Download archive: munk2d-shape-transform-loads-evidence.tar.gz.
+These artifact names describe the retained experiment; they are not paths
+shipped in this repository.

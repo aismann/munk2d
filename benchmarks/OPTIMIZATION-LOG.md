@@ -9,9 +9,11 @@ this file before repeating an experiment. Reducing solver iterations, collision
 accuracy, convergence, or numeric precision is not treated as an optimization; such
 quality/performance tradeoffs require explicit approval before implementation.
 
-Latest investigations: [deterministic batched collisions](#deterministic-batched-collision-screen-2026-11-17)
-and [polygon transform-coefficient loads](#polygon-transform-coefficient-load-screen-2026-11-17)
-found no general-purpose whole-step win. The [S22 campaign, November 2026](#s22-profiling-and-optimization-campaign-2026-11)
+Latest investigation: [compound-body broad phase](#compound-body-broad-phase-screen-2026-11-17)
+shows substantial dense-compound gains but unacceptable sparse/mixed-world and
+memory costs. Earlier [deterministic batching](#deterministic-batched-collision-screen-2026-11-17)
+and [transform-coefficient loads](#polygon-transform-coefficient-load-screen-2026-11-17)
+found no general-purpose win. The [S22 campaign, November 2026](#s22-profiling-and-optimization-campaign-2026-11)
 records merged packet NEON/owned-pair traversal, rejected follow-ups and final
 hybrid performance/memory validation. Earlier profile notes are historical, not
 a current cross-platform bottleneck ranking.
@@ -840,3 +842,128 @@ REPRODUCE.md, candidate.patch, harness.patch, test source, all rawphone
 CSV/state/telemetry and quality logs, binaries/hashes, stack prologues,
 timing-summary.json, screen-gate.json, verification.json. Download archive:
 munk2d-batched-collision-evidence.tar.gz (workspace artifacts, not repo paths).
+
+## Compound-body broad-phase screen (2026-11-17)
+
+**Decision: promising dense-compound lead, reject this first implementation as
+a general-purpose backend.** Base3878565 (engine2006f7b). User permits changed
+trajectories but requires high quality and same-build/platform determinism; PGO
+excluded. No precision/iteration/accuracy reduction or default/Pymunk changes.
+
+One private body-BBTree proxy per active body; nested shape-BB filtering inside
+body pairs. Static/sleeping shapes retain the old static index. Dynamic shape
+index becomes query-only (no duplicate old collision-pair cache), with ordinary
+reindex/HastySpace restoring original pairs. Stable body IDs and canonical
+shape-ID feature cache, body-removal hook for allocation-address reuse. Private
+ledger context, no public layout change. Custom begin/pre/non-BB/nonfinite active
+bounds fall back. Single-shape-only worlds keep the old path plus a small guard;
+mixed worlds still pay duplicate body/query nodes for their single-shape bodies.
+
+| Solver | Whole-step geometric | Summed scene time | Including setup/destruction | Same-reference A/A geometric |
+|---|---:|---:|---:|---:
+| Normal baseline | -1.44% | -3.40% | -1.45% | -0.03% |
+| Packet NEON | -1.08% | -3.24% | -1.06% | 0.07% |
+
+Selected step-time changes (baseline/NEON): Multifixture−50.35/−49.68%,
+MildN2−19.99/−18.66%, Compact16−9.27/−10.23%, Compact64−17.45/−17.58%.
+But Tumbler+34.34/+37.63%, BigMobile+17.70/+19.14%; Sparse4≈2.0–2.3x,
+Sparse16≈6.6–7.7x, Sparse64≈23–24x runtime. Vehicle-like4-fixture and articulated
+probes are neutral/slower, not general wins for every compact compound.
+
+Multifixture callbacks fall≈98%, but geometry calls fall only a few percent and
+newshapeBBchecks remain≈12.6million; do not claim98%ofcollisionwork disappears.
+Sparse64 performs185599488shapeBBchecks/600steps: large mostly-empty body
+bounds admit many pairs, followed by m*nshape loops. Counts are from separate
+instrumented builds with states matching ordinary binaries, not timed counters.
+No phase-time/PMU attribution was performed. Old/new trajectories differ in
+12/104main and16/18supplemental combinations; changed work is disclosed.
+
+Peak requested allocations improve≈31–33%Multi/35–37%Compact64 but worsen
+≈38%BigMobile,≈19–24%CompactVehicles and up to52.20%Sparse4. Direct requested
+bytes, not RSS/allocator metadata/libc/Python heap. All140instrumented lifecycle
+cases balance allocations; state snapshots match normal binaries.
+
+Three paired+threeA/A rounds, both solvers,26existing+9supplemental scenes,
+CPU4NDKr27dReleaseO3/LTO, warmup/sample/batch1/1/1;840rows,48thermal0checks,
+no outliers dropped/no root or clock changes. Main geomean/target/single-control
+gates pass, sparse and>15%memory gates fail. No rescue thresholds/variants or
+confirmation/cross-platform performance/Python integration after rejection.
+
+Verification PASS: seven full24-test suites (fourAndroid,nativeON/OFF,ASan),
+7callback-free physical fixtures with backend-active assertions, compact/sparse
+4/16/64-fixture brute-force/query oracles, lifecycle/fallback/Hasty tests.
+18freshphysical-fixture and18freshfull-identity-oracle processes include actual
+packetNEON/nativeAVX2/ASanAVX2; repeats under allocator perturbation match.
+Identity oracle checks341730shape-pair identities/normals and52560shape-point
+hitidentities/outputs per run.2048exactmainrepeatcheckpoint comparisons plus
+72supplemental all-step rolling comparisons;3072mainrecordsfinite.
+Instrumentation state matches8memory+8work configurations. Same-build/platform
+repeatability tested, not exhaustive/cross-platform proof. New-context OOM-fault
+and timestamp-wrap qualification remain pre-production follow-up, not completed.
+Detached-body/index-membership cases also need explicit fallback qualification.
+
+A next design needs tight local/cluster bounds for sparse/hollow bodies and
+avoiding duplicate indexing in mostly-single-shape worlds. Local hierarchy
+alone does not automatically eliminate the hollow-barrel outer-pair issue.
+Prototype private; no engine PR or default change.
+
+Workspace evidence: exports/munk2d-compound-broadphase/{REPORT.md,PLAN.md,
+REPRODUCE.md,candidate.patch,harness.patch,reference-tests.patch}, rawphone
+CSV/state/telemetry, memory/work summaries, source/binary hashes and verification.
+Download: munk2d-compound-broadphase-evidence.tar.gz (workspace artifacts, not
+repository paths).
+
+## Tight shape-tree owner-pruning screen (2026-11-18)
+
+**Decision: reject frozen candidate as a general-purpose optimization.** Base3878565(engine2006f7b).
+PGO excluded; deterministic same-build/platform outcomes and quality required.
+Private compile-time option OFF; no production/default/Pymunk change or engine PR.
+
+Keep the existing tight shape tree for collisions AND queries. Cache a common
+body identity in unused internal-node union space; skip same-owner subtrees
+and leaves during collision marking. No separate body index or nested shape
+expansion. Node72/Pair56 unchanged on tested64-bit double/default+uint64stamp;
+tree grows16private bytes. Query callbackNULL for singles; metadata always
+maintained. Pointer identity only, no pointer ordering. Generic trees ungrouped;
+static/sleeping shapes and custom handlers retain normal semantics.
+
+| Solver | Step geometric | Summed scene time | Setup + step + destruction geometric | A/A step geometric |
+|---|---:|---:|---:|---:|
+| Normal baseline | -0.74% | -5.65% | -0.44% | 0.09% |
+| Packet NEON | -0.97% | -6.15% | -0.79% | -0.04% |
+
+Selected step changes (baseline/NEON):
+- Multifixture: -44.43% / -43.78%.
+- MildN2: 0.69% / 0.46%.
+- AddPair: 2.42% / 1.39%.
+- Tumbler: 1.72% / 1.10%.
+- BigMobile: 2.62% / 2.78%.
+- Compact16: -16.98% / -20.15%.
+- Compact64: -33.99% / -33.62%.
+- Sparse4: 0.40% / 0.50%.
+- Sparse16: 0.58% / 0.48%.
+- Sparse64: 1.20% / 1.44%.
+
+Frozen gates: >=.5%both main means,>=5%Multi+two supp per solver; no existing
+scene>3%all3rounds, no supp>10%all3rounds,peakrequestedmemory<=+5%.
+Failures: [{"mode":"stock","failed":["existingSceneRegressionPass"]},{"mode":"enabled","failed":["existingSceneRegressionPass"]}]; memory PASS
+(max0.01%). No timing-driven rescue variant/threshold.
+No six-round independent confirmation, cross-platform performance or Python
+integration qualification after this screen. Source changed before timing only.
+
+840timings,3paired+3A/Arounds,26main+9supp,baseline+actualNEON,CPU4NDKr27d
+O3g/LTO,warmup/sample/batch1/1/1,48thermal0prechecks,alloutliersretained.
+8x25CTestPASS(including nativeASan/UBSan,OFF,uint64stamp);96object/800operation
+metadata/pair/order/ID model;7physicsfixtures;18freshquality+18identity+18edge
+processes repeat under allocator perturbation;detachedbody/ownerreinsertion/
+mutatinghandlers/publicpoint+BB+radiusray oraclesPASS.2048main+72supp exact
+repeatcomparisons,3072finiterecords;ALLcaptured old/new states match.
+140memory+140work cases,8+8instrumented state configurations match normal.
+Requestedbytes excludeallocator/libc/Python/RSS;alllifecyclesbalance.
+Counters demonstrate skipped callbacks/treework,notPMUtimeattribution.
+Referenceengineunchanged;frozenpatchreconstructionPASS.
+
+Workspace evidence: exports/munk2d-shape-owner-pruning/{REPORT.md,PLAN.md,
+REPRODUCE.md,candidate.patch,reference.patch}, rawtiming/state/telemetry,
+work/memory summaries, fulltests and source/binary hashes. Download:
+munk2d-shape-owner-pruning-evidence.tar.gz (workspace,notrepository path).

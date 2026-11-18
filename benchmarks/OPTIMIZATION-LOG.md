@@ -9,14 +9,18 @@ this file before repeating an experiment. Reducing solver iterations, collision
 accuracy, convergence, or numeric precision is not treated as an optimization; such
 quality/performance tradeoffs require explicit approval before implementation.
 
-Latest investigation: [compound-body broad phase](#compound-body-broad-phase-screen-2026-11-17)
-shows substantial dense-compound gains but unacceptable sparse/mixed-world and
-memory costs. Earlier [deterministic batching](#deterministic-batched-collision-screen-2026-11-17)
-and [transform-coefficient loads](#polygon-transform-coefficient-load-screen-2026-11-17)
-found no general-purpose win. The [S22 campaign, November 2026](#s22-profiling-and-optimization-campaign-2026-11)
+Latest investigation: [owner pruning and reusable query stack](#owner-pruning-and-reusable-query-stack-factorial-screen-2026-11-18)
+tests current/A/B/A+B on the S22. Stack reuse does not offset the owner's
+Diagonal/SlowExplosion regressions; the frozen combination is rejected.
+[Tight shape-tree owner pruning](#tight-shape-tree-owner-pruning-screen-2026-11-18)
+retains dense-compound gains without the earlier body-proxy sparse/memory costs,
+but is not a general-purpose win. Earlier [compound-body broad phase](#compound-body-broad-phase-screen-2026-11-17),
+[deterministic batching](#deterministic-batched-collision-screen-2026-11-17) and
+[transform-coefficient loads](#polygon-transform-coefficient-load-screen-2026-11-17)
+retain their separate results below. The [S22 campaign, November 2026](#s22-profiling-and-optimization-campaign-2026-11)
 records merged packet NEON/owned-pair traversal, rejected follow-ups and final
-hybrid performance/memory validation. Earlier profile notes are historical, not
-a current cross-platform bottleneck ranking.
+hybrid performance/memory validation. Historical host results are leads, not
+current S22 measurements or a cross-platform bottleneck ranking.
 
 ## Accepted
 
@@ -967,3 +971,49 @@ Workspace evidence: exports/munk2d-shape-owner-pruning/{REPORT.md,PLAN.md,
 REPRODUCE.md,candidate.patch,reference.patch}, rawtiming/state/telemetry,
 work/memory summaries, fulltests and source/binary hashes. Download:
 munk2d-shape-owner-pruning-evidence.tar.gz (workspace,notrepository path).
+
+## Owner-pruning and reusable query-stack factorial screen (2026-11-18)
+
+**Decision: REJECT_FROZEN_COMBINATION.** UserauthorizeddocsPR29merge;b72c103
+(engine2006f7b). IsolatedR/A/B/AB factorial: Rcurrent; Apreviousownertree;
+Boperation-localqueryscratch; ABboth. HistoricalBpatchnotlocated; reimplements
+documentedmechanism,notoldsource/percentages. NormalizedpreprocessedRmatches
+production,ApreviousfrozenA. BothoptionsOFF;production/default/Pymunkunchanged.
+
+| Solver | A / current | B / current | A+B / current | A+B / A | A+B / B | Reference A/A |
+|---|---:|---:|---:|---:|---:|---:|
+| Normal baseline | -0.95% | 0.36% | -0.91% | 0.09% | -1.37% | 0.21% |
+| Packet NEON | -0.95% | 0.09% | -0.74% | 0.15% | -0.82% | 0.26% |
+
+Selected A+B/current and A+B/A changes(baseline/NEON):
+- Diagonal: vsR 7.43%/6.23%; vsA -0.35%/-0.78%.
+- SlowExplosion: vsR 7.97%/8.32%; vsA 0.80%/1.81%.
+- Multifixture: vsR -44.70%/-44.30%; vsA 0.08%/-0.26%.
+- AddPair: vsR 2.76%/2.26%; vsA -0.22%/-0.08%.
+
+Independent gain assumption is not used: reportA/R,B/R,AB/R,AB/A,AB/B,
+interactionAB*R/(A*B),andR2/R1A/A. Ref perblock/scene sqrt(R1*R2);median
+3blockratios thengeomean. ABmainmean<=-.5%,Multi<=-30%,Compact64<=-20%,
+no main>3%all3blocks/supp>10%all3,peakrequested<=+5%;failedconditions
+[{"mode":"stock","failed":["mainRegressionPass"]},{"mode":"enabled","failed":["mainRegressionPass"]}]. No tuning/rescuevariant/independentconfirmation
+orcross-platformperformance/Pythonqualificationafterfailedscreen.
+
+1050timings(780main270supp),60thermal0prechecks,3blocks*2solvers*R1/A/B/AB/R2,
+26main+9supp,CPU4NDKr27dO3g/LTO,1warmup/sample/batch,alloutliersretained.
+12x25CTestPASS(8Android,nativeAB/OFF/ASAN/uint64stamp),17direct201leafdeepheap
+stressruns(allflags+ASAN+timestamp+Android);4repeatpasses,nestedpublicquery,
+callbackorder/cacheIDs,poolreuse,actualcapacityreuseverified. Node72Pair56same.
+30freshphysics+30identity+30edgeprocessesunder3allocatorlayoutsPASS.
+4096main+144supp exactrepeats,6144finiterecords;changedvsRmain0/supp0.
+280heaprequestedlifecyclesbalance,16instrumentedstateconfigsmatchnormal;
+worstABpeak0.01%(32bytes). Requestedheapnot
+RSS/stack/allocator/libc/Python. Sourcefreeze+patchreconstructionPASS.
+
+BsharesascratchbufferonlywithinsequentialMarkLeafQuerycallsofoneMarkContext;
+all3contextlifecyclescovered,logicaltopreseteachquery,freeoverflowonceatend.
+No global/thread-local/persistentworldscratch;publicquerycodeunchanged.
+Compilerallocator-rangewarningsretained;nofalsewarning-free/OOMguarantee.
+Workspaceevidence:exports/munk2d-owner-stack-combo/{REPORT.md,PLAN.md,
+REPRODUCE.md,candidate.patch},rawfourwaytimings/states/telemetry/memory,
+fulltests/controlproof/source/binaryhashes. Download:
+munk2d-owner-stack-combo-evidence.tar.gz(workspaceartifact,notrepositorypath).

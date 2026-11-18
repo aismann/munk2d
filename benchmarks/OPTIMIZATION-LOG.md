@@ -9,9 +9,12 @@ this file before repeating an experiment. Reducing solver iterations, collision
 accuracy, convergence, or numeric precision is not treated as an optimization; such
 quality/performance tradeoffs require explicit approval before implementation.
 
-Latest investigation: [owner pruning and reusable query stack](#owner-pruning-and-reusable-query-stack-factorial-screen-2026-11-18)
-tests current/A/B/A+B on the S22. Stack reuse does not offset the owner's
-Diagonal/SlowExplosion regressions; the frozen combination is rejected.
+Latest investigation: [owner pruning and circle updates](#owner-pruning-and-circle-update-factorial-screen-2026-11-18)
+tests current/A/B/A+B on the S22. Circle updates partly offset SlowExplosion's
+owner-pruning cost, but Diagonal/SlowExplosion still regress consistently;
+the frozen combination is rejected. The prior
+[query-stack combination](#owner-pruning-and-reusable-query-stack-factorial-screen-2026-11-18)
+also did not resolve the trade-off.
 [Tight shape-tree owner pruning](#tight-shape-tree-owner-pruning-screen-2026-11-18)
 retains dense-compound gains without the earlier body-proxy sparse/memory costs,
 but is not a general-purpose win. Earlier [compound-body broad phase](#compound-body-broad-phase-screen-2026-11-17),
@@ -1017,3 +1020,48 @@ Workspaceevidence:exports/munk2d-owner-stack-combo/{REPORT.md,PLAN.md,
 REPRODUCE.md,candidate.patch},rawfourwaytimings/states/telemetry/memory,
 fulltests/controlproof/source/binaryhashes. Download:
 munk2d-owner-stack-combo-evidence.tar.gz(workspaceartifact,notrepositorypath).
+
+## Owner-pruning and circle-update factorial screen (2026-11-18)
+
+**Decision: REJECT_FROZEN_COMBINATION.** UserauthorizeddocsPR30mergecfcb291
+(engine2006f7b). Rcurrent,Aownerpruning,Bbuiltin-circlestepupdates,ABboth.
+Historicalcirclepatchnotlocated/newmechanismimplementation,nooldhostdata
+pooled. Exactclassidentity+sameTransformPoint/BBForCirclemath;allotherclasses
+originalcacheAPI. Nocounters/eligibilityscan/newworldstate/qualitycuts/PGO.
+BothoptionsOFF;production/default/Pymunkunchanged;noenginePR.
+
+| Solver | Owner / current | Circle / current | Combined / current | Combined / owner | Combined / circle | A/A |
+|---|---:|---:|---:|---:|---:|---:|
+| Normal baseline | -1.02% | -0.45% | -1.36% | -0.35% | -0.77% | -0.30% |
+| Packet NEON | -0.63% | -0.29% | -0.88% | -0.33% | -0.56% | 0.11% |
+
+Selected AB/R and AB/A changes(baseline/NEON):
+- Diagonal: vsR 6.54%/8.51%; vsA -0.46%/-0.78%.
+- SlowExplosion: vsR 5.63%/5.10%; vsA -2.81%/-2.59%.
+- Multifixture: vsR -44.21%/-43.04%; vsA 0.26%/0.05%.
+- FallingCircles: vsR 2.49%/3.11%; vsA -1.04%/-0.79%.
+
+EachcontrastOWNmedian3blockratios thengeomean;R=sqrt(R1*R2).
+A/R,B/R,AB/R,AB/A,AB/B,interactionAB*R/(A*B),R2/R1A/A allretained.
+FrozenABgate:main<=-.5%,Multi<=-30%,Compact64<=-20%,nomain>3%all3blocks,
+nosupp>10%all3,peakrequested<=+5%. Failures:[{"mode":"stock","failed":["mainRegressionPass"]},{"mode":"enabled","failed":["mainRegressionPass"]}].
+No timing-drivenrescue/eligibilitytuning or independentconfirmation/
+crossplatformperformance/sharedconsumer/Pymunkqualificationafterfailedscreen.
+
+1050timings(780main270supp),60thermal0prechecks,CPU4NDKr27dO3gLTO,
+26main9supp3blocks2solversR1/A/B/AB/R2,1warmup/sample/batch,alloutliersretained.
+12x26CTestPASS(8Android,nativeAB/OFF/ASAN/uint64stamp),each100kfinite+10kraw
++32directedcacheoracle(actualhelpervsvolatileoriginalAPI,exactfinitebits/
+nonfiniteclassifications,customsame-type/segment/polyfallbacks). FastON7
+suites/OFF5controls,repeateddefinedcasesnotindependentmillions.
+30freshphysics+30identity+30edgeprocessesunder3allocatorlayoutsPASS.
+4096main+144supp exactrepeats,6144finiterecords;changedvsRmain0/supp0.
+280heaprequestedlifecyclesbalance,16instrumentedconfigsstate-matchnormal;
+worstABpeak0.01%(32bytes). NotRSS/stack/allocator/libc/Python.
+Node72Pair56same;sourceRproduction/AoldApreprocessedtokencontrolsPASS;
+sourcefreeze+patchreconstructionPASS. Privateexterncirclesingletononly
+whenBcompiledON;publiccacheAPI/Hastyspaceunchanged. Shared-library/
+consumer implications still require qualification.
+Workspaceevidence:exports/munk2d-owner-circle-combo/{REPORT.md,PLAN.md,
+REPRODUCE.md,candidate.patch},allfourwayrawdata/tests/source/binaryhashes.
+Download:munk2d-owner-circle-combo-evidence.tar.gz(workspaceartifact).

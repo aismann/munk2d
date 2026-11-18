@@ -912,3 +912,58 @@ REPRODUCE.md,candidate.patch,harness.patch,reference-tests.patch}, rawphone
 CSV/state/telemetry, memory/work summaries, source/binary hashes and verification.
 Download: munk2d-compound-broadphase-evidence.tar.gz (workspace artifacts, not
 repository paths).
+
+## Tight shape-tree owner-pruning screen (2026-11-18)
+
+**Decision: reject frozen candidate as a general-purpose optimization.** Base3878565(engine2006f7b).
+PGO excluded; deterministic same-build/platform outcomes and quality required.
+Private compile-time option OFF; no production/default/Pymunk change or engine PR.
+
+Keep the existing tight shape tree for collisions AND queries. Cache a common
+body identity in unused internal-node union space; skip same-owner subtrees
+and leaves during collision marking. No separate body index or nested shape
+expansion. Node72/Pair56 unchanged on tested64-bit double/default+uint64stamp;
+tree grows16private bytes. Query callbackNULL for singles; metadata always
+maintained. Pointer identity only, no pointer ordering. Generic trees ungrouped;
+static/sleeping shapes and custom handlers retain normal semantics.
+
+| Solver | Step geometric | Summed scene time | Setup + step + destruction geometric | A/A step geometric |
+|---|---:|---:|---:|---:|
+| Normal baseline | -0.74% | -5.65% | -0.44% | 0.09% |
+| Packet NEON | -0.97% | -6.15% | -0.79% | -0.04% |
+
+Selected step changes (baseline/NEON):
+- Multifixture: -44.43% / -43.78%.
+- MildN2: 0.69% / 0.46%.
+- AddPair: 2.42% / 1.39%.
+- Tumbler: 1.72% / 1.10%.
+- BigMobile: 2.62% / 2.78%.
+- Compact16: -16.98% / -20.15%.
+- Compact64: -33.99% / -33.62%.
+- Sparse4: 0.40% / 0.50%.
+- Sparse16: 0.58% / 0.48%.
+- Sparse64: 1.20% / 1.44%.
+
+Frozen gates: >=.5%both main means,>=5%Multi+two supp per solver; no existing
+scene>3%all3rounds, no supp>10%all3rounds,peakrequestedmemory<=+5%.
+Failures: [{"mode":"stock","failed":["existingSceneRegressionPass"]},{"mode":"enabled","failed":["existingSceneRegressionPass"]}]; memory PASS
+(max0.01%). No timing-driven rescue variant/threshold.
+No six-round independent confirmation, cross-platform performance or Python
+integration qualification after this screen. Source changed before timing only.
+
+840timings,3paired+3A/Arounds,26main+9supp,baseline+actualNEON,CPU4NDKr27d
+O3g/LTO,warmup/sample/batch1/1/1,48thermal0prechecks,alloutliersretained.
+8x25CTestPASS(including nativeASan/UBSan,OFF,uint64stamp);96object/800operation
+metadata/pair/order/ID model;7physicsfixtures;18freshquality+18identity+18edge
+processes repeat under allocator perturbation;detachedbody/ownerreinsertion/
+mutatinghandlers/publicpoint+BB+radiusray oraclesPASS.2048main+72supp exact
+repeatcomparisons,3072finiterecords;ALLcaptured old/new states match.
+140memory+140work cases,8+8instrumented state configurations match normal.
+Requestedbytes excludeallocator/libc/Python/RSS;alllifecyclesbalance.
+Counters demonstrate skipped callbacks/treework,notPMUtimeattribution.
+Referenceengineunchanged;frozenpatchreconstructionPASS.
+
+Workspace evidence: exports/munk2d-shape-owner-pruning/{REPORT.md,PLAN.md,
+REPRODUCE.md,candidate.patch,reference.patch}, rawtiming/state/telemetry,
+work/memory summaries, fulltests and source/binary hashes. Download:
+munk2d-shape-owner-pruning-evidence.tar.gz (workspace,notrepository path).

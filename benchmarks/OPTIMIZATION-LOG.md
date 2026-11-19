@@ -9,7 +9,12 @@ this file before repeating an experiment. Reducing solver iterations, collision
 accuracy, convergence, or numeric precision is not treated as an optimization; such
 quality/performance tradeoffs require explicit approval before implementation.
 
-Latest investigation: [owner pruning and circle updates](#owner-pruning-and-circle-update-factorial-screen-2026-11-18)
+Latest investigation: [owner-maintenance convergence](#owner-maintenance-convergence-screen-2026-11-19)
+tests production, the previous owner-pruning prototype and convergent metadata maintenance
+on the S22. The frozen screen fails the general-use gate; no production engine change.
+The body-centric update alternative is recorded separately in [issue #32](https://github.com/vibloteket/munk2d/issues/32).
+
+Previous investigation: [owner pruning and circle updates](#owner-pruning-and-circle-update-factorial-screen-2026-11-18)
 tests current/A/B/A+B on the S22. Circle updates partly offset SlowExplosion's
 owner-pruning cost, but Diagonal/SlowExplosion still regress consistently;
 the frozen combination is rejected. The prior
@@ -1065,3 +1070,82 @@ consumer implications still require qualification.
 Workspaceevidence:exports/munk2d-owner-circle-combo/{REPORT.md,PLAN.md,
 REPRODUCE.md,candidate.patch},allfourwayrawdata/tests/source/binaryhashes.
 Download:munk2d-owner-circle-combo-evidence.tar.gz(workspaceartifact).
+
+
+## Owner-maintenance convergence screen (2026-11-19)
+
+**Rejected as a general optimization under the frozen gate.** Base dce736c (engine2006f7b). R is production; A is the prior
+homogeneous-owner shape-tree pruning prototype; C is A with incremental owner maintenance.
+All experimental options remain OFF by default; no production engine/default/Pymunk change.
+No circle/stack combination, PGO, threading, precision or iteration change.
+
+C performs the complete required ancestor bounds walk, then propagates owner metadata
+from the first affected parent only until its cached owner stops changing. The previous
+value is saved before recomputation; bounding-box updates never stop at owner convergence.
+New/rebuilt nodes initialize owner metadata. No additional persistent storage or allocation;
+Node72/Pair56 retained.
+
+Three paired blocks on S22 CPU4/mask10, NDKr27d arm64/API28 O3gLTO, baseline and actual packet NEON;
+26 reference main scenes plus 9 supplements. R1/A/C/R2 ordering balanced/reversed, candidate
+paired with sqrt(R1*R2), one warmup/sample/batch. All 840 timing rows and
+48 thermal-status-0 prechecks retained. Negative is faster.
+
+| Contrast, main step | Baseline geometric | NEON geometric | Baseline summed | NEON summed |
+|---|---:|---:|---:|---:|
+| A/R | -0.74% | -1.24% | -5.63% | -6.37% |
+| C/R | -1.66% | -1.76% | -6.59% | -7.08% |
+| C/A | -1.05% | -0.59% | -1.02% | -0.77% |
+| AA | 0.23% | -0.00% | 0.17% | -0.21% |
+
+Each contrast has its own median three-block paired ratios; do not multiply published
+medians. AA is repeated production. Dedicated Android still has background activity
+and frequency variation; thermal status 0 does not mean fixed clocks.
+
+| Scene | C/R baseline | C/R NEON | C/A baseline | C/A NEON |
+|---|---:|---:|---:|---:|
+| Multifixture | -45.54% | -45.38% | -2.40% | -3.36% |
+| Compact64 | -34.43% | -33.57% | -0.54% | -0.15% |
+| Diagonal | 3.50% | 2.71% | -3.83% | -3.15% |
+| SlowExplosion | 3.97% | 4.49% | -2.53% | -2.37% |
+| AddPair | 0.82% | 0.95% | -1.31% | -0.18% |
+| FallingCircles | 2.11% | 2.19% | -0.93% | -0.68% |
+| Sparse64 | 0.20% | 0.48% | -0.68% | 0.07% |
+
+Predeclared gate: BOTH solvers main geometric <=.995, Multifixture <=.70, Compact64 <=.80,
+no main scene >3% in ALL three blocks, no supplemental scene >10% in ALL three, requested
+heap peak <=+5%, and all quality/determinism/invariant tests pass.
+- stock: mainMeanPass=true, multifixturePass=true, compact64Pass=true, mainRegressionPass=false, suppRegressionPass=true, memoryPass=true. Consistent main regressions: SlowExplosion 3.99%/3.97%/3.93%.
+- enabled: mainMeanPass=true, multifixturePass=true, compact64Pass=true, mainRegressionPass=false, suppRegressionPass=true, memoryPass=true. Consistent main regressions: SlowExplosion 4.49%/3.87%/4.75%.
+
+Separate counters: A/C have identical candidate/narrow-phase calls, node visits and
+pruning counts, and instrumented states match ordinary captures. Owner recomputations:
+- Diagonal/stock: 4508988 -> 300125 (93.34% fewer); 0 internal prunes.
+- Diagonal/enabled: 4474179 -> 300035 (93.29% fewer); 0 internal prunes.
+- SlowExplosion/stock: 2248973 -> 265001 (88.22% fewer); 0 internal prunes.
+- SlowExplosion/enabled: 2248973 -> 265001 (88.22% fewer); 0 internal prunes.
+- Multifixture/stock: 11085286 -> 720372 (93.50% fewer); 960858 internal prunes.
+- Multifixture/enabled: 11835530 -> 736410 (93.78% fewer); 971466 internal prunes.
+
+Counts do not prove elapsed-time attribution. All **11x25 CTest suites pass**
+(native R/A/C AVX2, C ASan/UBSan, C uint64 timestamps, six Android R/A/C baseline/NEON).
+Strengthened owner model includes 256 homogeneous/mixed/homogeneous transitions and
+24,576 bound reindexes where owner convergence must not truncate bounds propagation,
+plus original 800 randomized topology/filtered callback-order/ID/fat-pair operations.
+Thirty additional seeded model processes and 90 fresh physical/identity/edge oracle
+processes pass. 3072 main repeat comparisons, 108 supplemental
+rolling-state comparisons, 4608 finite main records pass; 0 main /
+0 supplemental captured trajectories differ from production. This is not formal
+all-state or cross-platform bitwise proof. 210 wrapped-allocation lifecycles balance,
+12 instrumented states match ordinary binaries; worst C requested peak
+0.01% (+32 bytes). Requested bytes are not RSS/libc/stack/allocator overhead.
+
+R engine token streams match production and A matches the previous owner prototype;
+benchmark harness identity, frozen source hashes, full test-log audit, oracle object
+freshness, patch reconstruction and independent gate audit pass. No native performance,
+Wasm or Pymunk qualification is claimed. A passing screen still needs independent
+confirmation; a failed frozen implementation is not rescue-tuned.
+
+Evidence: workspace exports/munk2d-owner-convergence/REPORT.md, PLAN.md, REPRODUCE.md,
+candidate.patch, source snapshots, raw timings/states/telemetry, full CTest/oracle/model
+logs, work/memory counters and gate/audit JSON; companion evidence archive. Body-centric
+shape-cache/update locality remains an **unimplemented** separate hypothesis in issue32.

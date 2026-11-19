@@ -9,7 +9,12 @@ this file before repeating an experiment. Reducing solver iterations, collision
 accuracy, convergence, or numeric precision is not treated as an optimization; such
 quality/performance tradeoffs require explicit approval before implementation.
 
-Latest investigation: [owner-query fast-path refinement](#owner-query-fast-path-refinement-2026-11-19)
+Latest investigation: [lazy owner-metadata activation](#lazy-owner-metadata-activation-2026-11-19)
+defers recomputation until the first eligible query, then allocation-free postorder
+rebuilds both linked roots. Screen passes but independent confirmation fails; no production recommendation.
+Production/defaults remain unchanged.
+
+Previous investigation: [owner-query fast-path refinement](#owner-query-fast-path-refinement-2026-11-19)
 separates owner/no-owner traversal and safely caches per-leaf eligibility. Screen passes but independent confirmation fails; no production recommendation.
 Production engine/defaults remain unchanged.
 
@@ -1256,3 +1261,124 @@ timing batch was started. Exact failing status is unknown (original runner did n
 persist that response). Recovery telemetry verified status0, then resumed same campaign
 without discarding/repeating any measured row; all27 prior batches retained. No power/
 clock/root/thermal settings changed. Pause/recovery disclosed in companion evidence.
+
+
+## Lazy owner-metadata activation (2026-11-19)
+
+**Screen passes but independent confirmation fails; no production recommendation.** Base dce736c/production engine2006f7b. R=production;D=previous
+owner-pruning+convergence+query fastpath;E=D+lazy activation. New option OFF by
+default and requires all3 prior options. No engine/default/Pymunk merge or PGO,
+precision/iterations/contact-quality/thread changes. Generic private trees stay
+eager unless explicitly opted in; cpSpace defers on empty linked roots.
+
+Dormant mutation does full BB/topology work, skips owner propagation/recomputation
+and NULL-initializes new internal owner slots. First real owned query rebuilds BOTH
+linked roots before metadata consumption/publishing active. Parent-pointer iterative
+postorder:O(n)time/O(1)storage,no recursion/allocation. Sticky activation,no membership
+counters/deactivation/scene thresholds. Empty reconfiguration resets eager; generic
+mutable eligibility refresh and unpruned public queries preserved. Node72/Pair56
+unchanged; extra bool may fit prior tree padding. Not zero overhead: validity checks
+and NULL initialization remain. Once enabled, upkeep continues even if compounds
+are later removed. One-time O(n) first-use latency is explicitly charged/disclosed.
+
+S22 CPU4mask10 NDKr27d arm64API28 O3gLTO,baseline+actual packetNEON. Three balanced
+R1/D/E/R2blocks,26main9supp,840rows48successfulthermal0 batches,1warmup/sample/batch;
+vs sqrt(R1*R2). All outliers retained. Each contrast own median3ratios,not products.
+
+| Main RUN contrast | Baseline geometric | NEON geometric | Baseline summed | NEON summed |
+|---|---:|---:|---:|---:|
+| D/R | -2.00% | -1.99% | -7.14% | -7.44% |
+| E/R | -2.43% | -1.98% | -7.40% | -7.36% |
+| E/D | -0.36% | 0.12% | -0.29% | 0.08% |
+| AA | -0.07% | -0.00% | -0.21% | 0.08% |
+
+| Screen main E/R phase | Baseline geometric | NEON geometric |
+|---|---:|---:|
+| init_time | -2.03% | 1.14% |
+| run_time | -2.43% | -1.98% |
+| destroy_time | 4.19% | 0.50% |
+| total_time | -2.33% | -1.92% |
+
+| Screen E/R RUN | Baseline | NEON |
+|---|---:|---:|
+| Multifixture | -46.67% | -46.15% |
+| Compact64 | -34.23% | -33.95% |
+| Diagonal | -1.18% | 2.85% |
+| SlowExplosion | 1.96% | 2.89% |
+| AddPair | 0.09% | 0.89% |
+| FallingCircles | 0.06% | 0.73% |
+| Sparse64 | 1.29% | 0.57% |
+
+Predeclared screen BOTH:mainRUNgeo<=.995/Multi<=.70/Compact64<=.80/no mainRUN>3%ALL3/
+no suppRUN>10%ALL3/no mainTOTAL>5%ALL3/peak<=5%/allquality. No postmeasurement tuning.
+- stock: mainMeanPass=true, multifixturePass=true, compact64Pass=true, mainRegressionPass=true, suppRegressionPass=true, totalRegressionPass=true, memoryPass=true.
+- enabled: mainMeanPass=true, multifixturePass=true, compact64Pass=true, mainRegressionPass=true, suppRegressionPass=true, totalRegressionPass=true, memoryPass=true.
+
+Independent confirmation predeclared BEFORE screen outcome:6freshR1/E/R2blocks,
+1260rows72thermal0successbatches,same frozen binaries/settings,not pooled with screen.
+Stricter EACHmainRUNmedian<=1.03/supp<=1.10/mainTOTAL<=1.05 +same suite/dense targets.
+Result **PHONE_CONFIRMATION_FAIL**.
+
+| Confirmed main phase | Baseline geometric | NEON geometric | Baseline summed | NEON summed |
+|---|---:|---:|---:|---:|
+| run_time E/R | -2.35% | -1.71% | -7.49% | -7.22% |
+| run_time AA | -0.33% | 0.17% | -0.25% | 0.02% |
+| total_time E/R | -2.26% | -1.65% | -7.41% | -7.15% |
+| total_time AA | -0.31% | 0.14% | -0.25% | 0.02% |
+
+| Confirmed E/R RUN | Baseline | NEON |
+|---|---:|---:|
+| Multifixture | -47.08% | -46.08% |
+| Compact64 | -34.15% | -33.94% |
+| Diagonal | 0.05% | 3.33% |
+| SlowExplosion | 1.74% | 3.55% |
+- Confirmation enabled regression Diagonal: 3.33%.
+- Confirmation enabled regression SlowExplosion: 3.55%.
+- Confirmation enabled regression RotaryLimitConstraints: 3.19%.
+
+Separate counters/states: unchanged collision/narrow/mark visits/prunes/query lookups/
+plain-owned query counts; only metadata/bootstrap counters differ. Mark visits do NOT
+include separately counted bootstrap. Metadata recomputations/activation/nodes:
+- Diagonal/stock: 300125->0,activations0,rebuilt internal nodes0.
+- Diagonal/enabled: 300035->0,activations0,rebuilt internal nodes0.
+- SlowExplosion/stock: 265001->0,activations0,rebuilt internal nodes0.
+- SlowExplosion/enabled: 265001->0,activations0,rebuilt internal nodes0.
+- Multifixture/stock: 720372->720371,activations1,rebuilt internal nodes3.
+- Multifixture/enabled: 736410->736409,activations1,rebuilt internal nodes3.
+
+Counters not wall-time/PMU attribution. Separate structural late-first-use probe
+(allocation hooks deny activation allocations),not full physics or worst-case timing;
+no prevalidation cache-warming/forced eviction. Three fresh samples,median values:
+
+| Leaves/mode | Setup ms | Activation ms | Teardown ms | Total ms |
+|---|---:|---:|---:|---:|
+| 1000/D | 0.1329 | 0.0006 | 0.0177 | 0.1512 |
+| 1000/E | 0.2706 | 0.0181 | 0.0252 | 0.3123 |
+| 10000/D | 1.1882 | 0.0009 | 0.0711 | 1.2602 |
+| 10000/E | 0.9221 | 0.1925 | 0.0575 | 1.1721 |
+
+All **11x27=297 final CTest cases pass** (nativeR/D/EAVX2,Esanitizers/
+uint64timestamps,6Android baseline/actualNEON). Newlazy test5Eexecutes/6OFFSKIP;
+96objects,64dormant/32active topology/pool/optimize/transfers,mutable-firsteligible
+callback,linked metadata+BB invariants,nestedqueries/IDs,empty/config/leafreuse,
+8192deep linked activation under allocation denial. Priorquery test8executes/3skip;
+strongowner model/physicsretained.90freshphysics/identity/edge+30seededmodelsPASS;
+3072+108exactrepeat/rolling comparisons,4608finite records;0main/0suppcaptured changes.
+Not formal all-state/cross-platform proof.210heaplifecyclesbalance/12stateconfigs
+match;worstErequestedpeak0.01%(+48B),notRSS/libc/stack/allocator/Python.
+R/DCPP/harness controls,source/header/oraclefreshness,hashes,patchreconstruction,
+all gate/thermal/row/probe audits pass.
+
+Every thermal failure is persisted before natural cooldown/recheck; all measured
+rows retained,no power/root/clocks changed. Dedicated Android still has variable
+frequency/background work. Hosttests onlycorrectness; no x86/Wasmperformance or
+Pymunk/mergequalification implied. Workspace exports/munk2d-owner-lazy-activation
+containsPLAN/REPORT/REPRODUCE,patch/snapshots,rawtests/oracles/timings/telemetry,
+work/memory/late-probes,all phase summaries/gates/audits,ELFs+disassembly/archive.
+Issue32 remains separately unimplemented.
+
+Confirmation recorded 5 thermal-status1 prechecks in 3 batches, natural30s waits only. No timed row dropped/repeated.
+- main-2-stock-R1.csv: 1 waits; beforepairedblock.
+- main-3-enabled-R2.csv: 2 waits; WITHINpairedblock,addsuncertainty.
+- main-5-enabled-R1.csv: 2 waits; beforepairedblock.
+All successful batches started at status0; no fixed-clock claim, all AA/ratios retained.

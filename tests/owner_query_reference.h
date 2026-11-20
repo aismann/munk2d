@@ -1,10 +1,8 @@
 static void ReferenceMarkLeafQuery(Node *subtree, Node *leaf, cpBool left, MarkContext *context)
 {
-#if CP_SHAPE_OWNER_PRUNING
 	cpBBTree *tree = context->tree;
 	const void *owner = tree->queryKey ? tree->queryKey(leaf->obj)
 									   : (tree->ownerKey ? tree->ownerKey(leaf->obj) : NULL);
-#endif
 	CP_STACK_INIT(stack);
 
 	CP_STACK_PUSH(stack, subtree);
@@ -12,16 +10,12 @@ static void ReferenceMarkLeafQuery(Node *subtree, Node *leaf, cpBool left, MarkC
 	while(CP_STACK_NOTEMPTY(stack))
 	{
 		Node *node = CP_STACK_POP(stack);
-#if CP_SHAPE_OWNER_PRUNING
 		if(owner && !NodeIsLeaf(node) && node->node.children.owner == owner) continue;
-#endif
 		if(cpBBIntersects(leaf->bb, node->bb))
 		{
 			if(NodeIsLeaf(node))
 			{
-#if CP_SHAPE_OWNER_PRUNING
 				if(owner && NodeOwner(tree, node) == owner) continue;
-#endif
 				if(left)
 				{
 					PairInsert(leaf, node, context->tree);

@@ -40,7 +40,6 @@ static void testFree(void *p)
 			exit(1);                                                                               \
 		}                                                                                          \
 	} while(0)
-#if CP_SHAPE_OWNER_PRUNING
 typedef struct Object
 {
 	cpBB bb;
@@ -313,10 +312,8 @@ static uint64_t world(int lazy)
 	cpSpatialIndexFree(w.s);
 	return w.hash;
 }
-#endif
 int main(void)
 {
-#if CP_SHAPE_OWNER_PRUNING
 	CHECK(world(0) == world(1));
 	probe(2);
 	probe(3);
@@ -324,8 +321,5 @@ int main(void)
 	puts("Lazy owner differential dormant/active bounds, pool/optimize/transfers, mutable "
 		 "eligibility, linked roots, empty/leaf/deep rebuild, allocation denial, nested queries "
 		 "and callback IDs PASS");
-#else
-	puts("Lazy owner differential SKIP: lazy activation compiled out");
-#endif
 	return 0;
 }

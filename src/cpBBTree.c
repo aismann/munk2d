@@ -87,11 +87,9 @@ struct cpBBTree {
 	cpArray *allocatedBuffers;
 
 	cpTimestamp stamp;
-#if CP_SHAPE_OWNER_PRUNING
 	cpBBTreeOwnerFunc ownerKey, queryKey;
 	cpBool cacheOwnerQueries;
 	cpBool ownersActive;
-#endif
 };
 
 struct Node {
@@ -104,9 +102,7 @@ struct Node {
 		struct
 		{
 			Node *a, *b;
-#if CP_SHAPE_OWNER_PRUNING
 			const void *owner;
-#endif
 		} children;
 
 		// Leaves
@@ -325,7 +321,6 @@ NodeSetB(Node *node, Node *value)
 	value->parent = node;
 }
 
-#if CP_SHAPE_OWNER_PRUNING
 static inline const void *NodeOwner(cpBBTree *tree, Node *node)
 {
 	if(!tree->ownerKey) return NULL;
@@ -348,7 +343,6 @@ static inline void PropagateOwner(cpBBTree *tree, Node *node)
 		if(previous == node->node.children.owner) break;
 	}
 }
-#endif
 
 static Node *
 NodeNew(cpBBTree *tree, Node *a, Node *b)
@@ -361,12 +355,10 @@ NodeNew(cpBBTree *tree, Node *a, Node *b)
 
 	NodeSetA(node, a);
 	NodeSetB(node, b);
-#if CP_SHAPE_OWNER_PRUNING
 	if(tree->ownersActive)
 		UpdateOwner(tree, node);
 	else
 		node->node.children.owner = NULL;
-#endif
 
 	return node;
 }
@@ -400,9 +392,7 @@ NodeReplaceChild(Node *parent, Node *child, Node *value, cpBBTree *tree)
 	for(Node *node=parent; node; node = node->parent){
 		node->bb = cpBBMerge(node->A->bb, node->B->bb);
 	}
-#if CP_SHAPE_OWNER_PRUNING
 	PropagateOwner(tree, parent);
-#endif
 }
 
 //MARK: Subtree Functions
@@ -459,9 +449,7 @@ SubtreeInsert(Node *subtree, Node *leaf, cpBBTree *tree)
 		for(Node *n = parent; n; n = n->parent){
 			n->bb = cpBBMerge(n->bb, leaf->bb);
 		}
-#if CP_SHAPE_OWNER_PRUNING
 		PropagateOwner(tree, parent);
-#endif
 
 		return subtree;
 	}
@@ -566,7 +554,6 @@ SubtreeRemove(Node *subtree, Node *leaf, cpBBTree *tree)
 	}
 }
 
-#if CP_SHAPE_OWNER_PRUNING
 // Keep one-time bootstrap code out of the hot owner-query function. This is
 // only a code-placement hint: activation still runs before any owner read.
 #if defined(__GNUC__) || defined(__clang__)
@@ -615,7 +602,6 @@ static CP_OWNER_BOOTSTRAP_COLD void ActivateOwners(cpBBTree *tree)
 	if(other) other->ownersActive = cpTrue;
 }
 #undef CP_OWNER_BOOTSTRAP_COLD
-#endif
 
 //MARK: Marking Functions
 
@@ -626,7 +612,6 @@ typedef struct MarkContext {
 	void *data;
 } MarkContext;
 
-#if CP_SHAPE_OWNER_PRUNING
 static void MarkLeafQueryPlain(Node *subtree, Node *leaf, cpBool left, MarkContext *context)
 {
 	CP_STACK_INIT(stack);
@@ -740,47 +725,17 @@ static void MarkLeafQueriesCached(Node *leaf, MarkContext *context, const void *
 		}
 	}
 }
-#else
-static void
-MarkLeafQuery(Node *subtree, Node *leaf, cpBool left, MarkContext *context)
-{
-	CP_STACK_INIT(stack);
-
-	CP_STACK_PUSH(stack, subtree);
-
-	while(CP_STACK_NOTEMPTY(stack)){
-		Node *node = CP_STACK_POP(stack);
-		if(cpBBIntersects(leaf->bb, node->bb)){
-			if(NodeIsLeaf(node)){
-				if(left){
-					PairInsert(leaf, node, context->tree);
-				} else {
-					if(node->STAMP < leaf->STAMP) PairInsert(node, leaf, context->tree);
-					context->func(leaf->obj, node->obj, 0, context->data);
-				}
-			} else {
-				CP_STACK_PUSH(stack, node->B);
-				CP_STACK_PUSH(stack, node->A);
-			}
-		}
-	}
-
-	CP_STACK_FREE(stack);
-}
-#endif
 
 static void
 MarkLeaf(Node *leaf, MarkContext *context)
 {
 	cpBBTree *tree = context->tree;
 	if(leaf->STAMP == GetMasterTree(tree)->stamp){
-#if CP_SHAPE_OWNER_PRUNING
 		if(tree->cacheOwnerQueries || !tree->queryKey)
 		{
 			MarkLeafQueriesCached(leaf, context, QueryOwner(tree, leaf));
 			return;
 		}
-#endif
 		Node *staticRoot = context->staticRoot;
 		if(staticRoot) MarkLeafQuery(staticRoot, leaf, cpFalse, context);
 
@@ -917,12 +872,10 @@ cpBBTreeInit(cpBBTree *tree, cpSpatialIndexBBFunc bbfunc, cpSpatialIndex *static
 	cpSpatialIndexInit((cpSpatialIndex *)tree, Klass(), bbfunc, staticIndex);
 
 	tree->velocityFunc = NULL;
-#if CP_SHAPE_OWNER_PRUNING
 	tree->ownerKey = NULL;
 	tree->queryKey = NULL;
 	tree->cacheOwnerQueries = cpFalse;
 	tree->ownersActive = cpTrue;
-#endif
 
 	tree->leaves = cpHashSetNew(0, (cpHashSetEqlFunc)leafSetEql);
 	tree->leafArray = cpArrayNew(0);
@@ -936,7 +889,6 @@ cpBBTreeInit(cpBBTree *tree, cpSpatialIndexBBFunc bbfunc, cpSpatialIndex *static
 	return (cpSpatialIndex *)tree;
 }
 
-#if CP_SHAPE_OWNER_PRUNING
 cpBool cpBBTreeConfigureOwners(cpSpatialIndex *index, cpBBTreeOwnerFunc ownerKey,
 							   cpBBTreeOwnerFunc queryKey)
 {
@@ -987,7 +939,6 @@ cpBool cpBBTreeOwnersConfigured(cpSpatialIndex *index)
 	cpBBTree *tree = GetTree(index);
 	return tree && tree->ownerKey;
 }
-#endif
 
 void
 cpBBTreeSetVelocityFunc(cpSpatialIndex *index, cpBBTreeVelocityFunc func)

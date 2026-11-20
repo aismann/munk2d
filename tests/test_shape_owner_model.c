@@ -83,12 +83,7 @@ static const void *validate(cpBBTree *t, Node *n)
 	const void *a = validate(t, n->A), *b = validate(t, n->B), *key = a && a == b ? a : NULL;
 	cpBB bb = cpBBMerge(n->A->bb, n->B->bb);
 	CHECK(n->bb.l <= bb.l && n->bb.b <= bb.b && n->bb.r >= bb.r && n->bb.t >= bb.t);
-#if CP_SHAPE_OWNER_PRUNING
 	CHECK(n->node.children.owner == (t->ownerKey ? key : NULL));
-#else
-	(void)t;
-	(void)key;
-#endif
 	return key;
 }
 static Node *leaf(cpBBTree *t, Obj *o)
@@ -131,18 +126,14 @@ static void transitions(void)
 {
 	Obj o[N];
 	cpBBTree *t = (cpBBTree *)cpBBTreeNew(bounds, NULL);
-#if CP_SHAPE_OWNER_PRUNING
 	CHECK(cpBBTreeConfigureOwners((cpSpatialIndex *)t, owner, owner));
-#endif
 	for(int i = 0; i < N; i++)
 	{
 		o[i] = OWNER_TEST_LITERAL(Obj){cpBBNew(i * 2, 0, i * 2 + 1, 1), i, 0, 1};
 		cpSpatialIndexInsert((cpSpatialIndex *)t, &o[i], i);
 		validate(t, t->root);
 	}
-#if CP_SHAPE_OWNER_PRUNING
 	CHECK(t->root->node.children.owner == owner(&o[0]));
-#endif
 	for(int pass = 0; pass < 256; pass++)
 	{
 		int i = (pass * 37) % N;
@@ -152,17 +143,13 @@ static void transitions(void)
 		o[i].bb = cpBBNew(-1000 - pass, -10, 1000 + pass, 10);
 		cpSpatialIndexInsert((cpSpatialIndex *)t, &o[i], i);
 		validate(t, t->root);
-#if CP_SHAPE_OWNER_PRUNING
 		CHECK(t->root->node.children.owner == NULL);
-#endif
 		cpSpatialIndexRemove((cpSpatialIndex *)t, &o[i], i);
 		validate(t, t->root);
 		o[i].owner = 0;
 		cpSpatialIndexInsert((cpSpatialIndex *)t, &o[i], i);
 		validate(t, t->root);
-#if CP_SHAPE_OWNER_PRUNING
 		CHECK(t->root->node.children.owner == owner(&o[0]));
-#endif
 		for(int j = 0; j < N; j++)
 		{
 			o[j].bb = cpBBNew(j * 2 - pass * 10, -pass - 1, j * 2 + pass * 10 + 1, pass + 2);
@@ -191,10 +178,8 @@ int main(int argc, char **argv)
 		s[k] = cpBBTreeNew(bounds, NULL);
 		d[k] = cpBBTreeNew(bounds, s[k]);
 	}
-#if CP_SHAPE_OWNER_PRUNING
 	CHECK(cpBBTreeConfigureOwners(d[1], owner, NULL));
 	CHECK(cpBBTreeOwnersConfigured(s[1]) && cpBBTreeOwnersConfigured(d[1]));
-#endif
 	for(int i = 0; i < N; i++)
 	{
 		double x = (int)(next() % 20) - 10, y = (int)(next() % 20) - 10;

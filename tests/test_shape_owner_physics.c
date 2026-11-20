@@ -52,10 +52,8 @@ static World world(void)
 {
 	World w = {0};
 	w.space = cpSpaceNew();
-#if CP_SHAPE_OWNER_PRUNING
 	CHECK(cpBBTreeOwnersConfigured(w.space->dynamicShapes) &&
 		  cpBBTreeOwnersConfigured(w.space->staticShapes));
-#endif
 	cpSpaceSetIterations(w.space, 20);
 	cpSpaceSetCollisionSlop(w.space, .02);
 	return w;

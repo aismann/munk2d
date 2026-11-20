@@ -12,7 +12,6 @@
 			exit(1);                                                                               \
 		}                                                                                          \
 	} while(0)
-#if CP_SHAPE_OWNER_PRUNING
 #include "owner_query_reference.h"
 typedef struct Object
 {
@@ -154,10 +153,8 @@ static void hints(void)
 	cpSpatialIndexFree(s);
 	active = NULL;
 }
-#endif
 int main(void)
 {
-#if CP_SHAPE_OWNER_PRUNING
 	compare(0, 0, 0);
 	compare(1, 0, 0);
 	compare(0, 1, 0); // generic refresh, including mutable callback
@@ -166,8 +163,5 @@ int main(void)
 	hints();
 	puts("Owner query differential: stable NULL/nonNULL, generic mutable eligibility, linked hint "
 		 "reset, nested public queries, cached IDs and eligibility-call counts PASS");
-#else
-	puts("Owner query differential SKIP: owner pruning compiled out");
-#endif
 	return 0;
 }

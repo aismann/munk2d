@@ -72,14 +72,6 @@ if(NOT MSVC)
   set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wall") # extend debug-profile with -Wall
 endif()
 
-# Owner pruning is enabled by default, with OFF retained as a fallback.
-# Convergence, per-leaf eligibility caching and deferred bootstrap are one feature.
-option(MUNK2D_ENABLE_SHAPE_OWNER_PRUNING "Enable same-body shape-subtree collision pruning" ON)
-if(MUNK2D_ENABLE_SHAPE_OWNER_PRUNING)
-  add_definitions(-DCP_SHAPE_OWNER_PRUNING=1)
-else()
-  add_definitions(-DCP_SHAPE_OWNER_PRUNING=0)
-endif()
 option(MUNK2D_ENABLE_LTO "Enable supported interprocedural/link-time optimization in non-Debug builds" ON)
 if(MUNK2D_ENABLE_LTO)
   include(CheckIPOSupported)

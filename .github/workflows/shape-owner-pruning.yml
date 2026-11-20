@@ -12,7 +12,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
-        owners: ['OFF', 'DEFAULT']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -21,15 +20,9 @@ jobs:
           cmake -S . -B build-owners -DCMAKE_BUILD_TYPE=Release
           -DBUILD_DEMOS=OFF -DBUILD_SHARED=OFF -DBUILD_STATIC=ON
           -DBUILD_TESTING=ON -DBUILD_BENCHMARKS=ON
-          ${{ matrix.owners == 'OFF' && '-DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=OFF' || '' }}
           -DCMAKE_C_FLAGS="${{ runner.os != 'Windows' && runner.arch == 'X64' && '-march=x86-64 -mtune=generic' || '' }}"
           -DCMAKE_CXX_FLAGS="${{ runner.os != 'Windows' && runner.arch == 'X64' && '-march=x86-64 -mtune=generic' || '' }}"
           -DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=${{ runner.arch == 'ARM64' && 'ON' || 'OFF' }}
-      - name: Verify owner setting
-        shell: bash
-        env:
-          EXPECTED_OWNER_PRUNING: ${{ matrix.owners == 'OFF' && 'OFF' || 'ON' }}
-        run: grep -Fx "MUNK2D_ENABLE_SHAPE_OWNER_PRUNING:BOOL=$EXPECTED_OWNER_PRUNING" build-owners/CMakeCache.txt
       - name: Build
         run: cmake --build build-owners --config Release --parallel 2
       - name: Test
@@ -44,7 +37,7 @@ jobs:
           cmake -S . -B build-owners -DCMAKE_BUILD_TYPE=RelWithDebInfo
           -DBUILD_DEMOS=OFF -DBUILD_SHARED=OFF -DBUILD_STATIC=ON
           -DBUILD_TESTING=ON -DBUILD_BENCHMARKS=ON
-          -DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=ON -DMUNK2D_ENABLE_LTO=OFF
+          -DMUNK2D_ENABLE_LTO=OFF
           -DCMAKE_C_FLAGS="-march=x86-64 -mtune=generic -fsanitize=address,undefined -fno-omit-frame-pointer"
           -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
       - name: Build
@@ -73,7 +66,7 @@ jobs:
         run: |
           npm install --no-save playwright@1.63.0
           npx playwright install --with-deps chromium
-      - name: Build and test default owners
+      - name: Build and test owner pruning
         env:
           SIMD: ${{ matrix.simd }}
         run: tests/build-wasm.sh build-owners-wasm

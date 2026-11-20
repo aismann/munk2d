@@ -63,8 +63,8 @@ licensed under the permissive MIT license. I hope you enjoy using Munk2D!
   for double-precision ARM64 builds, using two independent contacts per vector.
   Build and per-space selection are opt-in; no HastySpace threads are used.
 - [Same-body broad-phase pruning](docs/shape-owner-pruning.md) for overlapping
-  compound shapes. Shared C implementation for every solver, enabled by default;
-  set `MUNK2D_ENABLE_SHAPE_OWNER_PRUNING=OFF` to restore the previous behavior.
+  compound shapes. Shared C optimization included in every build, for every
+  solver; no build flag or runtime setting is required.
 - Support for collision event callbacks based on user definable object types.
 - Flexible collision filtering system with layers, exclusion groups and
   callbacks. \*\* Can be used to create all sorts of effects like one way

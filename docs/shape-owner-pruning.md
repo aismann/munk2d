@@ -1,19 +1,13 @@
 # Same-body broad-phase pruning
 
-The complete implementation is **enabled by default** in new CMake builds:
+The complete implementation is **included in every build**, including direct-source
+builds. There is no build flag or user-facing runtime setting:
 
 ```sh
 cmake -S . -B build -DBUILD_DEMOS=OFF -DBUILD_TESTING=ON
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
-
-Set `-DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=OFF` to restore the previous broad-phase
-behavior as a fallback. Existing CMake build directories retain their cached
-setting; use `-DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=ON` to enable it in a directory
-previously configured with OFF. Direct-source builds also enable pruning by
-default; compile all engine sources with `-DCP_SHAPE_OWNER_PRUNING=0` for the
-fallback when not using CMake.
 
 This is shared C broad-phase code, independent of the ordinary, AVX2, Wasm SIMD
 and ARM NEON contact solvers. It does not change their arithmetic, iterations,
@@ -25,7 +19,7 @@ Shapes on the same body cannot collide with one another. A private BBTree
 internal node may cache a common, non-NULL owner for its entire subtree. An
 eligible leaf query can skip that subtree before descending into individual
 shape pairs. Bounds, topology and the existing cached-pair lifecycle remain
-independent of this optional metadata.
+independent of this metadata.
 
 This mainly benefits overlapping compound bodies. Single-shape and sparse
 workloads should not be expected to improve. All public spatial queries remain
@@ -84,16 +78,15 @@ bootstrap. Shape-list tests exercise the actual cpSpace predicate.
 
 ## Storage and compatibility
 
-Owner fields belong to private BBTree storage and are compiled out when disabled.
+Owner fields belong to private BBTree storage and are always compiled in.
 Measured prototype configurations retained their existing Node/Pair sizes; tree
 configuration storage increased slightly. This is not a promise that all pointer
 widths, custom timestamp types, compilers or allocator layouts have identical
 memory costs. Requested allocation checks and 64-bit timestamp tests are part of
 validation. RSS and downstream allocator overhead are separate concerns.
 
-Do not set the old research-only convergence/query-fastpath/lazy-activation
-switches: they are intentionally not product configuration. The single feature
-switch selects the complete implementation.
+There are no product configuration switches for this optimization. The old
+research switches and the temporary feature gate have been removed.
 
 ## Performance evidence and limits
 

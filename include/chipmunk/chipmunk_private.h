@@ -23,11 +23,6 @@
 #ifndef CHIPMUNK_PRIVATE_H
 #define CHIPMUNK_PRIVATE_H
 
-// Direct-source builds share the CMake default; define 0 for the fallback.
-#ifndef CP_SHAPE_OWNER_PRUNING
-#define CP_SHAPE_OWNER_PRUNING 1
-#endif
-
 #include "chipmunk/chipmunk.h"
 #include "chipmunk/chipmunk_structs.h"
 
@@ -98,7 +93,6 @@ cpBool cpBBTreeSegmentQueryRadius(cpSpatialIndex *index, void *obj, cpVect a, cp
 // A radius-query fallback can avoid unsafe or excessive hash-cell enumeration.
 cpBool cpSpaceHashQueryUseEach(cpSpatialIndex *index, cpBB bb);
 
-#if CP_SHAPE_OWNER_PRUNING
 // Keys must remain stable while an object is indexed. queryKey may conservatively
 // return NULL; otherwise it must equal ownerKey. Linked trees use the same keys.
 typedef const void *(*cpBBTreeOwnerFunc)(void *obj);
@@ -111,7 +105,6 @@ cpBool cpBBTreeCacheOwnerQueries(cpSpatialIndex *index, cpBool stable);
 // Empty linked trees only; keys must be pure/stable. Generic trees stay eager
 // unless explicitly opted in. Activation rebuilds both roots before pruning.
 cpBool cpBBTreeDeferOwners(cpSpatialIndex *index);
-#endif
 
 //MARK: Arbiters
 

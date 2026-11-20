@@ -12,7 +12,6 @@
 			exit(1);                                                                               \
 		}                                                                                          \
 	} while(0)
-#if CP_SHAPE_OWNER_PRUNING
 // Exercise the actual private predicate and constructors, not a copied candidate.
 // The static library's cpSpace.o is not pulled: these public definitions satisfy
 // its references. Match this target's solver feature defines to the library.
@@ -252,10 +251,8 @@ static void transientRemoval(void)
 	cpBodyFree(b);
 	cpSpaceFree(space);
 }
-#endif
 int main(void)
 {
-#if CP_SHAPE_OWNER_PRUNING
 	model();
 	sleepLateCompound();
 	detachedCrossSpace();
@@ -263,8 +260,5 @@ int main(void)
 	puts("Actual shape-local query predicate: listed equivalence, unlinked conservative fallback, "
 		 "1000 rebind/type/index operations, late compound/sleep/wake, detached/cross-space "
 		 "membership and transient separate callback PASS");
-#else
-	puts("Shape-local query predicate SKIP: owner pruning compiled out");
-#endif
 	return 0;
 }

@@ -23,6 +23,11 @@
 #ifndef CHIPMUNK_PRIVATE_H
 #define CHIPMUNK_PRIVATE_H
 
+// Direct-source builds share the CMake default; define 0 for the fallback.
+#ifndef CP_SHAPE_OWNER_PRUNING
+#define CP_SHAPE_OWNER_PRUNING 1
+#endif
+
 #include "chipmunk/chipmunk.h"
 #include "chipmunk/chipmunk_structs.h"
 

@@ -1,17 +1,23 @@
-# Opt-in same-body broad-phase pruning
+# Same-body broad-phase pruning
 
-Enable the complete implementation with one CMake switch:
+The complete implementation is **enabled by default** in new CMake builds:
 
 ```sh
-cmake -S . -B build -DBUILD_DEMOS=OFF -DBUILD_TESTING=ON \
-  -DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=ON
+cmake -S . -B build -DBUILD_DEMOS=OFF -DBUILD_TESTING=ON
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-The default is **OFF**. This is shared C broad-phase code, independent of the
-ordinary, AVX2, Wasm SIMD and ARM NEON contact solvers. It does not change their
-arithmetic, iterations, precision or threading. It adds no public API.
+Set `-DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=OFF` to restore the previous broad-phase
+behavior as a fallback. Existing CMake build directories retain their cached
+setting; use `-DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=ON` to enable it in a directory
+previously configured with OFF. Direct-source builds also enable pruning by
+default; compile all engine sources with `-DCP_SHAPE_OWNER_PRUNING=0` for the
+fallback when not using CMake.
+
+This is shared C broad-phase code, independent of the ordinary, AVX2, Wasm SIMD
+and ARM NEON contact solvers. It does not change their arithmetic, iterations,
+precision or threading. It adds no public API.
 
 ## What is skipped
 

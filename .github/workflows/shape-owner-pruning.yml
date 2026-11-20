@@ -1,4 +1,4 @@
-name: Opt-in shape owner pruning
+name: Shape owner pruning
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
-        owners: ['OFF', 'ON']
+        owners: ['OFF', 'DEFAULT']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -21,10 +21,15 @@ jobs:
           cmake -S . -B build-owners -DCMAKE_BUILD_TYPE=Release
           -DBUILD_DEMOS=OFF -DBUILD_SHARED=OFF -DBUILD_STATIC=ON
           -DBUILD_TESTING=ON -DBUILD_BENCHMARKS=ON
-          -DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=${{ matrix.owners }}
+          ${{ matrix.owners == 'OFF' && '-DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=OFF' || '' }}
           -DCMAKE_C_FLAGS="${{ runner.os != 'Windows' && runner.arch == 'X64' && '-march=x86-64 -mtune=generic' || '' }}"
           -DCMAKE_CXX_FLAGS="${{ runner.os != 'Windows' && runner.arch == 'X64' && '-march=x86-64 -mtune=generic' || '' }}"
           -DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=${{ runner.arch == 'ARM64' && 'ON' || 'OFF' }}
+      - name: Verify owner setting
+        shell: bash
+        env:
+          EXPECTED_OWNER_PRUNING: ${{ matrix.owners == 'OFF' && 'OFF' || 'ON' }}
+        run: grep -Fx "MUNK2D_ENABLE_SHAPE_OWNER_PRUNING:BOOL=$EXPECTED_OWNER_PRUNING" build-owners/CMakeCache.txt
       - name: Build
         run: cmake --build build-owners --config Release --parallel 2
       - name: Test
@@ -68,11 +73,9 @@ jobs:
         run: |
           npm install --no-save playwright@1.63.0
           npx playwright install --with-deps chromium
-      - name: Build and test enabled owners
+      - name: Build and test default owners
         env:
           SIMD: ${{ matrix.simd }}
-          CMAKE_EXTRA_ARGS: -DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=ON
-          EXTRA_CFLAGS: -DCP_SHAPE_OWNER_PRUNING=1
         run: tests/build-wasm.sh build-owners-wasm
       - name: Browser solver and compound workloads
         env:

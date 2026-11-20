@@ -1,3 +1,4 @@
+#include "owner_test_compat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -59,11 +60,11 @@ static cpBB bounds(void *p)
 static const void *owner(void *p)
 {
 	ownerReads++;
-	return plainKey(p);
+	return plainKey((Object *)p);
 }
 static const void *query(void *p)
 {
-	return eligible ? plainKey(p) : NULL;
+	return eligible ? plainKey((Object *)p) : NULL;
 }
 static int active(cpBBTree *t)
 {
@@ -71,7 +72,7 @@ static int active(cpBBTree *t)
 }
 static void validate(cpBBTree *t, int leaves)
 {
-	Node **stack = malloc((size_t)(2 * leaves + 2) * sizeof(*stack));
+	Node **stack = (Node **)malloc((size_t)(2 * leaves + 2) * sizeof(*stack));
 	CHECK(stack);
 	int n = 0, count = 0, internals = 0;
 	if(t->root)
@@ -91,8 +92,8 @@ static void validate(cpBBTree *t, int leaves)
 		CHECK(p->A->parent == p && p->B->parent == p);
 		cpBB bb = cpBBMerge(p->A->bb, p->B->bb);
 		CHECK(cpBBContainsBB(p->bb, bb));
-		const void *a = p->A->obj ? plainKey(p->A->obj) : p->A->node.children.owner,
-				   *b = p->B->obj ? plainKey(p->B->obj) : p->B->node.children.owner;
+		const void *a = p->A->obj ? plainKey((Object *)p->A->obj) : p->A->node.children.owner,
+				   *b = p->B->obj ? plainKey((Object *)p->B->obj) : p->B->node.children.owner;
 		CHECK(p->node.children.owner == (active(t) ? (a && a == b ? a : NULL) : NULL));
 		CHECK(n + 2 <= 2 * leaves + 2);
 		stack[n++] = p->B;
@@ -107,7 +108,7 @@ static Node *chain(cpBBTree *t, Object *o, int count, int offset)
 	Node *root = NULL;
 	for(int i = 0; i < count; i++)
 	{
-		o[i] = (Object){cpBBNew(0, 0, 1, 1), offset + i, 0, 1};
+		o[i] = OWNER_TEST_LITERAL(Object){cpBBNew(0, 0, 1, 1), offset + i, 0, 1};
 		Node *leaf = LeafNew(t, o + i, o[i].bb);
 		root = root ? NodeNew(t, root, leaf) : leaf;
 	}
@@ -120,7 +121,7 @@ static void probe(int count)
 	cpBBTree *s = (cpBBTree *)si, *d = (cpBBTree *)di;
 	CHECK(cpBBTreeConfigureOwners(di, owner, query));
 	CHECK(cpBBTreeDeferOwners(si));
-	Object *objects = calloc((size_t)count, sizeof(*objects));
+	Object *objects = (Object *)calloc((size_t)count, sizeof(*objects));
 	CHECK(objects);
 	ownerReads = 0;
 	eligible = 0;
@@ -163,7 +164,7 @@ typedef struct World
 } World;
 static void hash(World *w, const void *p, size_t n)
 {
-	const unsigned char *b = p;
+	const unsigned char *b = (const unsigned char *)p;
 	while(n--)
 	{
 		w->hash ^= *b++;
@@ -179,8 +180,8 @@ static cpCollisionID queryCount(void *a, void *b, cpCollisionID id, void *data)
 }
 static cpCollisionID visit(void *aa, void *bb, cpCollisionID id, void *data)
 {
-	World *w = data;
-	Object *a = aa, *b = bb;
+	World *w = (World *)data;
+	Object *a = (Object *)aa, *b = (Object *)bb;
 	w->calls++;
 	hash(w, &a->id, sizeof(a->id));
 	hash(w, &b->id, sizeof(b->id));
@@ -223,7 +224,7 @@ static uint64_t world(int lazy)
 	for(int i = 0; i < N; i++)
 	{
 		w.objects[i] =
-			(Object){cpBBNew(i % 12, i / 12, i % 12 + 4, i / 12 + 4), i, i % 4, i % 3 ? 1 : 2};
+			OWNER_TEST_LITERAL(Object){cpBBNew(i % 12, i / 12, i % 12 + 4, i / 12 + 4), i, i % 4, i % 3 ? 1 : 2};
 		cpSpatialIndexInsert(indexFor(&w, w.objects + i), w.objects + i, i);
 	}
 	validateWorld(&w);

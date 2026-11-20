@@ -1,3 +1,4 @@
+#include "owner_test_compat.h"
 #include "chipmunk/chipmunk_private.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -16,7 +17,7 @@
 static uint64_t digest = 1469598103934665603ULL, randomState = 0xe7b1a927931ULL;
 static void hash(const void *p, size_t n)
 {
-	const unsigned char *s = p;
+	const unsigned char *s = (const unsigned char *)p;
 	while(n--)
 	{
 		digest ^= *s++;
@@ -141,7 +142,7 @@ static double step(World *w, double dt)
 	hash(&n, sizeof(n));
 	for(int i = 0; i < n; i++)
 	{
-		cpArbiter *a = w->space->arbiters->arr[i];
+		cpArbiter *a = (cpArbiter *)w->space->arbiters->arr[i];
 		hash(&a->a->hashid, sizeof(a->a->hashid));
 		hash(&a->b->hashid, sizeof(a->b->hashid));
 		number(a->n.x);
@@ -317,7 +318,7 @@ static void pointSeen(cpShape *s, cpVect p, cpFloat d, cpVect g, void *data)
 	(void)p;
 	(void)d;
 	(void)g;
-	World *w = data;
+	World *w = (World *)data;
 	int found = 0;
 	for(int i = 0; i < w->ns; i++)
 		if(w->shapes[i] == s) found++;

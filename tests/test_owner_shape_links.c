@@ -1,3 +1,4 @@
+#include "owner_test_compat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

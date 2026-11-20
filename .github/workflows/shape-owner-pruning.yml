@@ -22,6 +22,8 @@ jobs:
           -DBUILD_DEMOS=OFF -DBUILD_SHARED=OFF -DBUILD_STATIC=ON
           -DBUILD_TESTING=ON -DBUILD_BENCHMARKS=ON
           -DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=${{ matrix.owners }}
+          -DCMAKE_C_FLAGS="${{ runner.os != 'Windows' && runner.arch == 'X64' && '-march=x86-64 -mtune=generic' || '' }}"
+          -DCMAKE_CXX_FLAGS="${{ runner.os != 'Windows' && runner.arch == 'X64' && '-march=x86-64 -mtune=generic' || '' }}"
           -DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=${{ runner.arch == 'ARM64' && 'ON' || 'OFF' }}
       - name: Build
         run: cmake --build build-owners --config Release --parallel 2
@@ -38,7 +40,7 @@ jobs:
           -DBUILD_DEMOS=OFF -DBUILD_SHARED=OFF -DBUILD_STATIC=ON
           -DBUILD_TESTING=ON -DBUILD_BENCHMARKS=ON
           -DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=ON -DMUNK2D_ENABLE_LTO=OFF
-          -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          -DCMAKE_C_FLAGS="-march=x86-64 -mtune=generic -fsanitize=address,undefined -fno-omit-frame-pointer"
           -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
       - name: Build
         run: cmake --build build-owners --parallel 2

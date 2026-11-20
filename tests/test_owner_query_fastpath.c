@@ -1,3 +1,4 @@
+#include "owner_test_compat.h"
 #include "../src/cpBBTree.c"
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,11 +61,11 @@ static cpCollisionID nestedVisit(void *a, void *b, cpCollisionID id, void *data)
 }
 static cpCollisionID visit(void *a, void *b, cpCollisionID id, void *data)
 {
-	Run *run = data;
+	Run *run = (Run *)data;
 	CHECK(run == active);
 	CHECK(run->result.count < 64);
-	Object *aa = a, *bb = b;
-	run->result.rows[run->result.count++] = (Row){aa->id, bb->id, id};
+	Object *aa = (Object *)a, *bb = (Object *)b;
+	run->result.rows[run->result.count++] = OWNER_TEST_LITERAL(Row){aa->id, bb->id, id};
 	if(run->mutate) run->enabled = 1;
 	int count = 0, before = run->result.keyCalls;
 	cpSpatialIndexQuery((cpSpatialIndex *)run->tree, NULL, cpBBNew(-1, -1, 2, 2), nestedVisit,
@@ -88,7 +89,7 @@ static Result run(int reference, int enabled, int mutate, int cache)
 	Node *nodes[8];
 	for(int i = 0; i < 8; i++)
 	{
-		objects[i] = (Object){cpBBNew(0, 0, 1, 1), i};
+		objects[i] = OWNER_TEST_LITERAL(Object){cpBBNew(0, 0, 1, 1), i};
 		nodes[i] = LeafNew(state.tree, objects + i, objects[i].bb);
 	}
 	Node *a = NodeNew(state.tree, nodes[0], nodes[1]), *b = NodeNew(state.tree, nodes[2], nodes[3]);

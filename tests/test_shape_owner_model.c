@@ -1,3 +1,4 @@
+#include "owner_test_compat.h"
 #include "../src/cpBBTree.c"
 #include <stdio.h>
 #include <stdint.h>
@@ -41,7 +42,7 @@ static uint32_t next(void)
 }
 static void hash(const void *p, size_t n)
 {
-	const unsigned char *s = p;
+	const unsigned char *s = (const unsigned char *)p;
 	while(n--)
 	{
 		digest ^= *s++;
@@ -54,7 +55,7 @@ static cpBB bounds(void *p)
 }
 static const void *owner(void *p)
 {
-	Obj *o = p;
+	Obj *o = (Obj *)p;
 	return o->owner >= 0 ? keys + o->owner : NULL;
 }
 static cpCollisionID token(Obj *a, Obj *b)
@@ -67,7 +68,7 @@ static cpCollisionID visit(Obj *a, Obj *b, cpCollisionID id, Trace *t)
 	if(a->owner >= 0 && a->owner == b->owner) return id;
 	CHECK(t->n < MAX_TRACE);
 	CHECK(id == 0 || id == token(a, b));
-	t->rows[t->n++] = (Record){a->id, b->id, id};
+	t->rows[t->n++] = OWNER_TEST_LITERAL(Record){a->id, b->id, id};
 	return token(a, b);
 }
 static const void *validate(cpBBTree *t, Node *n)
@@ -135,7 +136,7 @@ static void transitions(void)
 #endif
 	for(int i = 0; i < N; i++)
 	{
-		o[i] = (Obj){cpBBNew(i * 2, 0, i * 2 + 1, 1), i, 0, 1};
+		o[i] = OWNER_TEST_LITERAL(Obj){cpBBNew(i * 2, 0, i * 2 + 1, 1), i, 0, 1};
 		cpSpatialIndexInsert((cpSpatialIndex *)t, &o[i], i);
 		validate(t, t->root);
 	}
@@ -197,7 +198,7 @@ int main(int argc, char **argv)
 	for(int i = 0; i < N; i++)
 	{
 		double x = (int)(next() % 20) - 10, y = (int)(next() % 20) - 10;
-		objects[i] = (Obj){cpBBNew(x, y, x + 4, y + 4), i, i % 9 == 8 ? -1 : i % 8, i % 4 ? 1 : 2};
+		objects[i] = OWNER_TEST_LITERAL(Obj){cpBBNew(x, y, x + 4, y + 4), i, i % 9 == 8 ? -1 : i % 8, i % 4 ? 1 : 2};
 		for(int k = 0; k < 2; k++)
 			cpSpatialIndexInsert(objects[i].where == 1 ? d[k] : s[k], objects + i, (cpHashValue)i);
 	}

@@ -2,8 +2,17 @@
 
 ## Unreleased
 
+## 2.4.0 (released 2026-11-20)
+
 ### Performance
 
+- Always-on same-body BB-tree subtree pruning for overlapping compound shapes,
+  shared by the baseline, AVX2, Wasm SIMD and ARM NEON solvers. Shape-local
+  eligibility, convergent owner maintenance and allocation-free deferred
+  bootstrap limit bookkeeping overhead. No build switch or public runtime
+  setting is required. Public spatial queries remain unpruned. Bootstrap is
+  one-time O(number of nodes), and small workload-dependent regressions remain;
+  see `docs/shape-owner-pruning.md` and PR #34 for final measurements and limits.
 - Split the BB-tree cached-pair endpoint lists so cached collision processing
   walks only callback-owned pairs. Pair records remain the same size; private
   tree nodes gain one head pointer. Callback order, cached IDs, bounding-box
@@ -19,6 +28,24 @@
   baseline remains the default solver. In enabled builds, baseline contact and
   packet arithmetic disable FMA contraction for matching numerical policy.
   See `docs/neon-contact-solver.md` for compatibility and device-specific results.
+
+### Tests and compatibility
+
+- Add same-body pruning model, query/callback, attachment/lifecycle, physical
+  quality and allocation-denial tests, with cross-platform native, sanitizer,
+  scalar/SIMD Wasm and Chromium CI.
+- Baseline remains the default solver. SIMD backends require explicit selection;
+  NEON remains an opt-in build. There is no new breaking API change; the shared
+  library ABI major remains 2. Broad-phase changes do not alter solver arithmetic
+  or tolerances.
+- NEON-enabled builds use non-fused contact arithmetic even for the baseline
+  solver, so numerical results can differ from a build without NEON. Replay and
+  lockstep users must validate their own scenarios; bit-identical results across
+  versions, modes, compilers or platforms are not promised. Performance is
+  CPU/browser/workload dependent, not a universal speedup.
+- Pymunk bindings must already use `CP_CONTACT_SOLVER_BASELINE`, the API rename
+  released in 2.3.0. Downstream validation using an isolated compatibility alias
+  does not establish that older, unmodified bindings can upgrade directly.
 
 ## 2.3.0 (released 2026-11-13)
 

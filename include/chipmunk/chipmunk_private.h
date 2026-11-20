@@ -93,6 +93,20 @@ cpBool cpBBTreeSegmentQueryRadius(cpSpatialIndex *index, void *obj, cpVect a, cp
 // A radius-query fallback can avoid unsafe or excessive hash-cell enumeration.
 cpBool cpSpaceHashQueryUseEach(cpSpatialIndex *index, cpBB bb);
 
+#if CP_SHAPE_OWNER_PRUNING
+// Keys must remain stable while an object is indexed. queryKey may conservatively
+// return NULL; otherwise it must equal ownerKey. Linked trees use the same keys.
+typedef const void *(*cpBBTreeOwnerFunc)(void *obj);
+cpBool cpBBTreeConfigureOwners(cpSpatialIndex *index, cpBBTreeOwnerFunc ownerKey,
+							   cpBBTreeOwnerFunc queryKey);
+cpBool cpBBTreeOwnersConfigured(cpSpatialIndex *index);
+// Empty linked trees only. Opt in ONLY if queryKey is pure and remains stable
+// throughout one MarkLeaf, including its callbacks. Generic trees default OFF.
+cpBool cpBBTreeCacheOwnerQueries(cpSpatialIndex *index, cpBool stable);
+// Empty linked trees only; keys must be pure/stable. Generic trees stay eager
+// unless explicitly opted in. Activation rebuilds both roots before pruning.
+cpBool cpBBTreeDeferOwners(cpSpatialIndex *index);
+#endif
 
 //MARK: Arbiters
 

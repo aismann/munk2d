@@ -1,0 +1,78 @@
+name: Opt-in shape owner pruning
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+        owners: ['OFF', 'ON']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: >
+          cmake -S . -B build-owners -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_DEMOS=OFF -DBUILD_SHARED=OFF -DBUILD_STATIC=ON
+          -DBUILD_TESTING=ON -DBUILD_BENCHMARKS=ON
+          -DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=${{ matrix.owners }}
+          -DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=${{ runner.arch == 'ARM64' && 'ON' || 'OFF' }}
+      - name: Build
+        run: cmake --build build-owners --config Release --parallel 2
+      - name: Test
+        run: ctest --test-dir build-owners -C Release --output-on-failure
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: >
+          cmake -S . -B build-owners -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DBUILD_DEMOS=OFF -DBUILD_SHARED=OFF -DBUILD_STATIC=ON
+          -DBUILD_TESTING=ON -DBUILD_BENCHMARKS=ON
+          -DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=ON -DMUNK2D_ENABLE_LTO=OFF
+          -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+      - name: Build
+        run: cmake --build build-owners --parallel 2
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1
+        run: ctest --test-dir build-owners --output-on-failure
+
+  wasm-browser:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        simd: ['OFF', 'ON']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 5.0.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Browser dependencies
+        run: |
+          npm install --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+      - name: Build and test enabled owners
+        env:
+          SIMD: ${{ matrix.simd }}
+          CMAKE_EXTRA_ARGS: -DMUNK2D_ENABLE_SHAPE_OWNER_PRUNING=ON
+          EXTRA_CFLAGS: -DCP_SHAPE_OWNER_PRUNING=1
+        run: tests/build-wasm.sh build-owners-wasm
+      - name: Browser solver and compound workloads
+        env:
+          SIMD: ${{ matrix.simd }}
+        run: node tests/run-wasm-browser.mjs build-owners-wasm/browser chromium

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.4.1 (released 2026-11-21)
+
 ### Changed
 
 - Include the optional AArch64 double-precision packet NEON backend by default

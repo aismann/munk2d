@@ -1,4 +1,4 @@
-# Opt-in AArch64 packet NEON contact solver
+# Optional AArch64 packet NEON contact solver
 
 This backend uses two independent double-precision contacts per Advanced SIMD vector in `cpSpaceStep()`. It reuses the AVX2/Wasm packet preparation, dependency scheduling, allocation-failure fallback, mixed contact/joint synchronization, and scalar joint sweeps. It does not use `cpHastySpaceStep()` or create threads.
 
@@ -6,13 +6,12 @@ This backend uses two independent double-precision contacts per Advanced SIMD ve
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-  -DBUILD_DEMOS=OFF -DBUILD_BENCHMARKS=ON -DBUILD_TESTING=ON \
-  -DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=ON
+  -DBUILD_DEMOS=OFF -DBUILD_BENCHMARKS=ON -DBUILD_TESTING=ON
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-The option defaults **OFF**. Enabling it requires a compiler target defining `__aarch64__`, `arm_neon.h` double-vector intrinsics, and `CP_USE_DOUBLES=1`; unsupported targets/configurations fail configuration explicitly. There is no float or 32-bit ARM backend. The target is ordinary AArch64 with Advanced SIMD support, not optional-ISA ARM32 or a general-registers-only environment. No x86-style runtime feature probe is used.
+`MUNK2D_ENABLE_NEON_CONTACT_SOLVER` defaults **ON**, like optional AVX2 inclusion. CMake probes the actual compiler target: `__aarch64__`, `arm_neon.h` double-vector intrinsics, and `CP_USE_DOUBLES=1` are required. Unsupported targets or precision configurations omit NEON without failing configuration. Set the option OFF to omit it deliberately; old build directories retain their cached option value. There is no float or 32-bit ARM backend. The target is ordinary AArch64 with Advanced SIMD support, not optional-ISA ARM32 or a general-registers-only environment. No x86-style runtime feature probe is needed for this AArch64 target.
 
 ```c
 if(cpContactSolverIsAvailable(CP_CONTACT_SOLVER_NEON)) {
@@ -30,11 +29,17 @@ For Android use the NDK CMake toolchain with `ANDROID_ABI=arm64-v8a`. Native com
 
 Logical packets remain four contacts wide. The backend solves each packet in two-contact halves, using the shared scalar tail for a final singleton. Loads transpose exactly six adjacent doubles per body into component lanes; stores touch only writable active bodies, never padding or a shared frozen side. Scalar packet and vector code share `cpContactSolverKernel.inc` and operation order. Compare/select min/max preserves scalar tie, signed-zero and unordered operand behavior rather than relying on hardware min/max.
 
-NEON and scalar packet kernels disable floating-point contraction. **When this option is enabled, `cpArbiter.c` also disables contraction**, aligning the baseline contact oracle/fallback with packet arithmetic on AArch64, where the compiler otherwise emits FMA. This can change baseline results and cost relative to a stock build even before selecting NEON. With the option OFF, baseline compilation is unchanged. Do not attribute this policy's effect to SIMD: measure the stock build, enabled-build baseline, scalar packet control, and NEON separately. For GCC optimized/LTO builds, the baseline and mixed stepping call sites (`cpSpaceStep.c`, `cpContactSolver.c`) also disable contraction to prevent re-fusing inlined expressions. Other engine translation units retain their existing flags.
+NEON and scalar packet kernels disable floating-point contraction locally. **Including NEON no longer changes the baseline compiler policy**: `cpArbiter.c`, `cpSpaceStep.c` and `cpContactSolver.c` keep the ordinary compiler settings, including permitted FMA contraction. The default solver is still baseline; merely making NEON available must not change its results.
+
+The ordinary AArch64 baseline may therefore round differently from the non-fused packet kernels. This is not an unsafe-instruction or memory failure and is not a promise of bit-identical baseline/NEON trajectories. Exact NEON checks use the same-schedule scalar packet oracle; baseline repeatability, physical-quality probes and exact baseline fallback checks remain separate. CI also compares ordinary baseline observations from independently built NEON-included and NEON-omitted libraries across all 26 reference scenes.
+
+Selecting NEON can still change trajectories, including relative to the original 2.4.0 implementation: that implementation disabled contraction in baseline-related code even when baseline was selected. Validate replay/lockstep applications when upgrading.
 
 The NEON backend translation unit is kept out of cross-file LTO. Public structs are unchanged and existing solver enum values retain their values; `CP_CONTACT_SOLVER_NEON` is appended as value 3. There is no Pymunk integration/policy change here.
 
 ## Validation and early performance evidence
+
+The measurements below describe the **original 2.4.0 arithmetic policy**, including its build-wide non-fused baseline control. They are retained as historical evidence, not fresh qualification of the isolated compiler policy described above.
 
 On one Galaxy S22 SM-S901B (Exynos 2200, Android 16), NDK r27d Release/default LTO, the packet kernel matched the scalar packet oracle byte-for-byte across all 26 smoke/reference benchmark checkpoint captures. The native solver tests cover partial packets, allocation boundaries, signed zero, frozen-side writes, poisoned/reused buffers, varying time steps/iterations, callbacks, sleep/wake, lifecycle and all ten built-in joint types. The comparison does not imply bit-identical trajectories to a differently compiled stock engine or all other backends.
 

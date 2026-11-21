@@ -332,12 +332,22 @@ int main(void)
  long mixedSteps = 0;
  for(int kind = 0; kind < 10; ++kind) for(int stack = 0; stack < 2; ++stack){
   World original,scalar,vector; make(&original,kind,0,stack);make(&scalar,kind,1,stack);make(&vector,kind,2,stack);
+#if CP_NEON_CONTACT_SOLVER
+  /* Baseline may use FMA; it is not the non-fused packet oracle. Check its
+   * deterministic repeatability independently without changing its flags. */
+  World baselineRepeat; make(&baselineRepeat,kind,0,stack);
+#endif
   for(int i = 0; i < 360; ++i){
    cpFloat dt = i%2 ? 1.0/60 : 1.0/120;
    int iterations = i%3 == 0 ? 1 : i%3 == 1 ? 10 : 20;
    if(i%17==0)poisonMixedArena(&vector);
    step(&original,dt,iterations);step(&scalar,dt,iterations);step(&vector,dt,iterations);
-   compare(&scalar,&vector);compare(&original,&vector);
+   compare(&scalar,&vector);
+#if CP_NEON_CONTACT_SOLVER
+   step(&baselineRepeat,dt,iterations);compare(&original,&baselineRepeat);
+#else
+   compare(&original,&vector);
+#endif
   }
   CHECK(vector.mixedSteps > 0 && vector.mixedCalls > 0 && vector.maxOverlap > 0);
   CHECK(scalar.mixedSteps == vector.mixedSteps);
@@ -345,8 +355,11 @@ int main(void)
   if(kind == 7) CHECK(vector.springCalls == 360*vector.jointCount);
   mixedSteps += vector.mixedSteps;
   destroy(&original);destroy(&scalar);destroy(&vector);
+#if CP_NEON_CONTACT_SOLVER
+  destroy(&baselineRepeat);
+#endif
  }
  customFallback();transitions();growShrink();
- printf("PASS: all10 built-in joints, flat/stacked connected contacts, dependency order, sparse overlap, original/scalar/SIMD exact bodies/contact/joint impulses, varying dt/iterations, callbacks, poisoned reuse, add/remove, joint-only endpoints, static/kinematic/partly frozen bodies, sleep/wake and custom-class fallback; %ld mixed steps.\n",mixedSteps);
+ printf("PASS: all10 built-in joints, flat/stacked connected contacts, dependency order, sparse overlap, baseline repeatability and same-policy scalar/SIMD exact bodies/contact/joint impulses, varying dt/iterations, callbacks, poisoned reuse, add/remove, joint-only endpoints, static/kinematic/partly frozen bodies, sleep/wake and custom-class fallback; %ld mixed steps.\n",mixedSteps);
  return 0;
 }

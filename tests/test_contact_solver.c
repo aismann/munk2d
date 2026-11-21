@@ -249,6 +249,12 @@ int main(void)
  CHECK(cpContactSolverGet(a.space)==ctx&&cpSpaceGetContactSolver(a.space)==TEST_CONTACT_SOLVER);
  packetKernels(ctx->kernel);
  make(&b,8,cpFalse);
+#if CP_NEON_CONTACT_SOLVER
+ /* The ordinary AArch64 baseline may contract FMA. Exact kernel comparisons
+  * use the same-schedule scalar oracle, not a different arithmetic policy. */
+ CHECK(cpSpaceSetContactSolver(b.space,TEST_CONTACT_SOLVER));
+ cpContactSolverGet(b.space)->kernel=cpContactSolverKernelScalar;
+#endif
  for(int i=0;i<8;i++){cpSpaceStep(a.space,1.0/60);cpSpaceStep(b.space,1.0/60);compare(&a,&b);}CHECK(ctx->usedLastStep);
  void *graph=ctx->graphMemory,*solver=ctx->solverMemory;int capacity=ctx->graphCapacity;
  cpSpaceStep(a.space,1.0/60);CHECK(ctx->graphMemory==graph&&ctx->solverMemory==solver);

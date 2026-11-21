@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Changed
+
+- Include the optional AArch64 double-precision packet NEON backend by default
+  when the compiler target supports it, matching optional AVX2 inclusion.
+  Unsupported targets/precision omit it without a configuration error; explicit
+  per-space selection remains required and baseline remains the default solver.
+- Isolate non-fused packet arithmetic from ordinary baseline compilation.
+  Including NEON no longer disables baseline/contact/joint FMA contraction.
+  Exact packet tests use the same-policy scalar oracle; baseline repeatability,
+  physical-quality and fallback checks remain separate, with new cross-build
+  baseline checkpoint invariance coverage. Selecting NEON is not a promise of
+  baseline-identical trajectories; replay users must validate their scenarios.
+
 ## 2.4.0 (released 2026-11-20)
 
 ### Performance

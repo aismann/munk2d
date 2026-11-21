@@ -58,34 +58,31 @@ endif()
 message(STATUS "Runtime-guarded AVX2 contact solver compiled: ${CP_AVX2_CONTACT_SOLVER}")
 message(STATUS "Wasm SIMD module requirement enabled: ${CP_WASM_SIMD_CONTACT_SOLVER}")
 
-# AArch64 has two-double Advanced SIMD registers. This is deliberately opt-in.
+# Probe the compiler target, not the build host. Unsupported targets/precision
+# omit the optional backend, exactly as the AVX2 backend does.
 set(CP_NEON_CONTACT_SOLVER OFF)
 if(MUNK2D_ENABLE_NEON_CONTACT_SOLVER)
   include(CheckCSourceCompiles)
   set(_cp_neon_saved_includes "${CMAKE_REQUIRED_INCLUDES}")
   set(CMAKE_REQUIRED_INCLUDES "${chipmunk_SOURCE_DIR}/include")
-  check_c_source_compiles("#include <arm_neon.h>
-    #include <chipmunk/chipmunk_types.h>
+  # Recheck when an existing build changes compiler flags or CP_USE_DOUBLES.
+  unset(MUNK2D_COMPILER_HAS_NEON_CONTACT_SOLVER CACHE)
+  check_c_source_compiles("#include <chipmunk/chipmunk_types.h>
     #if !defined(__aarch64__) || !CP_USE_DOUBLES
     #error NEON contact solver requires AArch64 and doubles
     #endif
+    #include <arm_neon.h>
     int main(void) { float64x2_t x = vdupq_n_f64(1.0); return vgetq_lane_f64(vaddq_f64(x,x),0) != 2.0; }"
     MUNK2D_COMPILER_HAS_NEON_CONTACT_SOLVER)
   set(CMAKE_REQUIRED_INCLUDES "${_cp_neon_saved_includes}")
-  if(NOT MUNK2D_COMPILER_HAS_NEON_CONTACT_SOLVER)
-    message(FATAL_ERROR "NEON contact solver requires an AArch64 double-precision target with arm_neon.h support")
-  endif()
-  set(CP_NEON_CONTACT_SOLVER ON)
-  # Keep arithmetic ordered like the scalar packet oracle; no fused operations.
-  set_source_files_properties(cpContactSolverNeon.c PROPERTIES COMPILE_OPTIONS "-ffp-contract=off;-fno-lto")
-  set_source_files_properties(cpContactSolverScalar.c PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
-  # AArch64 otherwise contracts the baseline contact expressions into FMA.
-  # Keep the baseline contact oracle and packet arithmetic equally non-fused.
-  set_source_files_properties(cpArbiter.c PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
-  if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    # GCC's default fast contraction can fuse inlined baseline contact/joint
-    # expressions at the two stepping call sites during optimized/LTO builds.
-    set_source_files_properties(cpSpaceStep.c cpContactSolver.c PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+  if(MUNK2D_COMPILER_HAS_NEON_CONTACT_SOLVER)
+    set(CP_NEON_CONTACT_SOLVER ON)
+    # Keep ordered arithmetic local to the packet kernels. Merely including
+    # NEON must not change baseline/contact/joint compiler policy.
+    set_source_files_properties(cpContactSolverNeon.c PROPERTIES COMPILE_OPTIONS "-ffp-contract=off;-fno-lto")
+    set_source_files_properties(cpContactSolverScalar.c PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+  else()
+    message(STATUS "NEON contact solver unavailable for this target/precision; omitting optional backend")
   endif()
 endif()
 message(STATUS "AArch64 packet NEON contact solver compiled: ${CP_NEON_CONTACT_SOLVER}")

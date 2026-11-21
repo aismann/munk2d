@@ -19,20 +19,17 @@ jobs:
         run: |
           args=(-DCMAKE_BUILD_TYPE=Release -DBUILD_DEMOS=OFF -DBUILD_BENCHMARKS=ON -DBUILD_TESTING=ON)
           case '${{ matrix.mode }}' in
-            enabled) args+=(-DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=ON);;
+            enabled) ;; # Exercise default inclusion without an ON override.
             disabled) args+=(-DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=OFF);;
-            float) args+=(-DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=OFF -DCMAKE_C_FLAGS=-DCP_USE_DOUBLES=0);;
+            float) args+=(-DCMAKE_C_FLAGS=-DCP_USE_DOUBLES=0);;
             # Clang's function-type check flags pre-existing shape-class callback
             # casts; exclude only that category, keeping address/other UB checks.
-            sanitizer) args+=(-DCMAKE_C_COMPILER=clang -DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=ON -DCMAKE_BUILD_TYPE=Debug '-DCMAKE_C_FLAGS_DEBUG=-O1 -g' -DMUNK2D_ENABLE_LTO=OFF '-DCMAKE_C_FLAGS=-fsanitize=address,undefined -fno-sanitize=function -fno-omit-frame-pointer' '-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined' '-DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=address,undefined');;
+            sanitizer) args+=(-DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Debug '-DCMAKE_C_FLAGS_DEBUG=-O1 -g' -DMUNK2D_ENABLE_LTO=OFF '-DCMAKE_C_FLAGS=-fsanitize=address,undefined -fno-sanitize=function -fno-omit-frame-pointer' '-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined' '-DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=address,undefined');;
           esac
           cmake -S . -B build "${args[@]}"
-          if [ '${{ matrix.mode }}' = float ]; then
-            if cmake -S . -B build-reject -DBUILD_DEMOS=OFF -DMUNK2D_ENABLE_NEON_CONTACT_SOLVER=ON -DCMAKE_C_FLAGS=-DCP_USE_DOUBLES=0 > reject.log 2>&1; then
-              echo 'Float NEON configuration unexpectedly accepted'; exit 1
-            fi
-            grep -q 'NEON contact solver requires' reject.log
-          fi
+          expected=1
+          case '${{ matrix.mode }}' in disabled|float) expected=0;; esac
+          grep -q "CP_NEON_CONTACT_SOLVER=$expected" build/src/CMakeFiles/chipmunk_static.dir/flags.make
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test
@@ -57,3 +54,31 @@ jobs:
           set -e
           test "$code" = 2
           grep -qi unavailable reject-cli.log
+      - uses: actions/setup-node@v4
+        if: matrix.mode == 'enabled' || matrix.mode == 'disabled'
+        with:
+          node-version: 22
+      - name: Capture ordinary baseline checkpoints
+        if: matrix.mode == 'enabled' || matrix.mode == 'disabled'
+        run: node tests/check-neon-baseline.mjs capture build/benchmarks/munkbench baseline/${{ matrix.mode }}.json
+      - uses: actions/upload-artifact@v4
+        if: matrix.mode == 'enabled' || matrix.mode == 'disabled'
+        with:
+          name: neon-baseline-${{ matrix.mode }}
+          path: baseline/${{ matrix.mode }}.json
+
+  baseline-invariance:
+    needs: native-arm64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: neon-baseline-*
+          path: baseline
+          merge-multiple: true
+      - name: NEON inclusion must not change baseline results
+        run: node tests/check-neon-baseline.mjs compare baseline/disabled.json baseline/enabled.json

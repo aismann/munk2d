@@ -61,7 +61,8 @@ licensed under the permissive MIT license. I hope you enjoy using Munk2D!
   browser threads. Scalar-compatible modules remain the default build.
 - An [optional AArch64 NEON packet contact solver](docs/neon-contact-solver.md)
   for double-precision ARM64 builds, using two independent contacts per vector.
-  Build and per-space selection are opt-in; no HastySpace threads are used.
+  Included automatically when supported; per-space selection stays explicit,
+  baseline arithmetic is unchanged, and no HastySpace threads are used.
 - [Same-body broad-phase pruning](docs/shape-owner-pruning.md) for overlapping
   compound shapes. Shared C optimization included in every build, for every
   solver; no build flag or runtime setting is required.

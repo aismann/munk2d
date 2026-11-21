@@ -21,7 +21,7 @@ if(cpContactSolverIsAvailable(CP_CONTACT_SOLVER_NEON)) {
 }
 ```
 
-Build-time enablement does not change the default solver. Both benchmark executables accept `--contact-solver neon`. Unavailable selection fails explicitly. HastySpace remains separate.
+Build-time enablement does not change the default solver. MunkBench accepts `--contact-solver neon`; the mixed benchmark (`munkbench_mixed`) uses `--solver neon`. Unavailable selection fails explicitly. HastySpace remains separate.
 
 For Android use the NDK CMake toolchain with `ANDROID_ABI=arm64-v8a`. Native command-line/static-library consumers currently also need Android's `log` library for the pre-existing `cpMessage` implementation, e.g. `-DCMAKE_C_STANDARD_LIBRARIES=-llog` in a C-only NDK test build. Benchmarks run as ordinary ADB shell executables; neither root nor Wi-Fi is required.
 

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(chipmunk)
+project(munk2D)
 
 # Munk2D 2.4.1
 set(MUNK2D_VERSION_MAJOR 2)
